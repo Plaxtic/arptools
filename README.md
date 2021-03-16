@@ -6,9 +6,9 @@ Made as an exersize to teach myself about ARP.
 
 Only works on Linux
 
-chmod +x build
+    chmod +x build
 
-./build
+    ./build
 
 All require sudo to open raw sockets
 
