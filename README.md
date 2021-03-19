@@ -4,7 +4,7 @@ A Tutorial on ARP cashe poisoning and a few simple tools written with raw_sock's
 
 Very much like a simple dsniff excepting the tutorial and the sweep tool.
 
-Made as an exersize to teach myself about ARP.
+Made as an exercise to teach myself about ARP.
 
 If you can't find a device to legaly spoof a sample tutorial is in tutorial.txt
 
