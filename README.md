@@ -1,23 +1,25 @@
 # arptools
 
 A Tutorial on ARP cashe poisoning and a few simple tools written with raw_sock's.
+
 Very much like a simple dsniff excepting the tutorial and the sweep tool.
+
 Made as an exersize to teach myself about ARP.
 
 Only works on Linux
 
-chmod +x build
+    chmod +x build
 
-./build
+    ./build
 
 All require sudo to open raw sockets
 
       sudo ./arp_tutorial
 
-* Walkthough of, what ARP packets are, how they work, and how they can be exploited.
+* Walkthough of, what ARP packets are, how they work, and how they can be exploited
 * Scans for network interfaces
 * Scans class C LAN for up IP's
-* Poisons user chosen target and host.
+* Poisons user chosen target and host
 
       sudo ./arp_spoof <interface> <target-sufix> <host-sufix> [num-packets]
    
