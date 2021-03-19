@@ -17,6 +17,7 @@
 #define MACSLEN 25
 #define TCPBUFZ 68880
 #define NPACKS  20
+#define IP_ALEN 4
 
 
 int isValidIpAddress(char *ipAddress);
@@ -25,7 +26,7 @@ void sigintHandler(int sig_num);
 static void mac_to_str(char *mac_str, unsigned char mac[ETH_ALEN]);
 int recv_tcp(int sock, unsigned char *buf, unsigned char *ip);
 void parseBytes(const char* str, char sep, unsigned char *bytes, int maxBytes, int base);
-int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[4]);
+int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[IP_ALEN]);
 int get_if_info(int sock, char dev[IFNAMSIZ], 
                           struct ifreq *ifreq_i,
                           struct ifreq *ifreq_c,
@@ -34,8 +35,8 @@ struct ether_arp *send_arp(int sock, int if_idx, unsigned char *s_mac,
                                                  unsigned char *d_mac, 
                                                  unsigned char *arp_s_mac, 
                                                  unsigned char *arp_t_mac, 
-                                                 uint8_t arp_s_ip[4], 
-                                                 uint8_t arp_t_ip[4], 
+                                                 uint8_t arp_s_ip[IP_ALEN], 
+                                                 uint8_t arp_t_ip[IP_ALEN], 
                                                  unsigned short int opcode);
 
 
@@ -51,7 +52,7 @@ int main(int argc, const char *argv[]) {
     char our_ip_str[IPSLEN], host_str[IPSLEN], target_str[IPSLEN], reply_str[IPSLEN];
     char LAN_ip[IPSLEN-4], sufix[4];
     struct ifreq ifreq_i, ifreq_c, ifreq_ip;
-    uint8_t our_ip[4], host_ip[4], target_ip[4];
+    uint8_t our_ip[IP_ALEN], host_ip[IP_ALEN], target_ip[IP_ALEN];
     int sock, send_len, recv_len, total_len, last_dot;
     unsigned char our_mac[ETH_ALEN], target_mac[ETH_ALEN], host_mac[ETH_ALEN];
     unsigned char *recv_buf = calloc(42, sizeof(unsigned char *));

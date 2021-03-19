@@ -1,0 +1,354 @@
+====================================================================
+
+Welcome to ARP POISON!  🐍 🐍 🐍 🐍
+
+This is a tutorial designed to teach a little bit about how ARP packets work.
+And scare you a little bit about how easy they are to exploit.
+This is NOT designed for people who already know how ARP cache poisoning works or don't care.
+If you are looking for a quick way to perform ARP spoofing download dsiff and wireshark.
+
+We are going to walk you through the steps of making ARP reqests and replies.
+And how they can be altered to spy on devices on the same network as you
+
+===================================================================
+
+(enter to continue)
+
+
+ARP cache poisoning or ARP spoofing is a so-called man-in-the-middle attack.
+It allows to spy on devices connected to the same network as you.
+With ARP packets you can trick them into sending data intended for the router to you.
+And trick the router into sending internet trafic intended for them to you also.
+By forwarding the trafic back and forth, it is possible to look at it without either device noticing.
+Thus becoming an invisible 'man-in-the-middle' between the target device and the host router.
+
+Please bear in mind that you will need a device you are allowed to spy on or the following will be ilegal.
+Your phone is a good bet.
+
+(enter to continue)
+
+
+In order to send ARP packets we are going to need to know what interface to use.
+The interface will probably be either your Ethernet (wired) or Wi-Fi interface.
+
+(enter to continue)
+
+
+I've detected these interfaces on your system (its probably the first one):
+
+Device  1: wlp3s0
+Device  2: lo
+Device  3: any
+Device  4: virbr0
+Device  5: docker0
+Device  6: bluetooth-monitor
+Device  7: nflog
+Device  8: nfqueue
+Device  9: ovs-system
+Device 10: virbr0-nic
+Device 11: wwan0
+Device 12: s1
+Device 13: enp0s25
+
+Choose your Wi-Fi interface by number: 1
+
+You chose: wlp3s0
+It's MAC and IP addresses are:
+------------------------------------------------
+    MAC address : 5C-E0-C5-37-CC-74
+    IP address  : 192.168.1.87
+------------------------------------------------
+
+(enter to continue)
+
+
+Scanning your network...
+1 seconds left....
+
+
+Found these addresses online (there might be more):
+
+192.168.1.1
+192.168.1.66
+192.168.1.68
+
+(enter to continue)
+
+
+The host and target will have to be on the same network as your interface
+This means we know the first 3 fields of the IP already
+
+(enter to continue)
+
+
+Enter final field of your targets IP address (they have to be online) 192.168.1.68
+If the host is your router its IP is probably 192.168.1.1 if its not, please enter it here in full: 
+
+Now we can send out an ARP request each of these IP's
+target : 192.168.1.68
+host   : 192.168.1.1
+
+(enter to continue)
+
+
+An ARP request is a very small packet of data sent from your computer or phone to everyone on your network.
+The packet is normaly only 42 bytes long, which takes up no more memory than this sentence:
+Hi, I am a sentence of only 42 characters.
+The packet contains MAC and IP addresses.
+You probably know what an IP is, but maybe not a MAC.
+A MAC address is the hardware address of your network interface is assigned by the manufacturer.
+Devices on your network will use the MAC address to communicate rather than IP.
+While your computer might know the IP it needs to send its data to (e.g. your router), it might not know the MAC address
+The ARP request is then sent out to your network asking 'what is the MAC address of <someIP>'.
+Depending on where you are, 'your network' most likely means everyone using the same Wi-Fi as you, this is called a LAN.
+So if you are at home you probably don't need to worry about this attack unless your neibours are hackers.
+But if you are in a coffee shop, you want to be using https.
+
+NOTE: this tutorial assumes you are on a 'class C' network meaning only the last field of your IP varies in your LAN.
+Let's take a look at our first request.
+
+(enter to continue)
+
+
+The first ARP request will look like this:
+
+(enter to continue)
+
+
+****************************ARP PACKET****************************
+                                                                  
+Ethernet Header                                                   
+	|-Source Address           :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Destination Address      :  FF-FF-FF-FF-FF-FF <- broadcast address               
+	|-EtherType                :  0x0806                            
+                                                                  
+ARP header                                                        
+	|-Source MAC               :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Target MAC               :  00-00-00-00-00-00 <- don't know yet               
+	|-Source IP                :  192.168.1.87      <- your IP                
+	|-Target IP                :  192.168.1.1       <- the ip of the host                
+	|-Hardware Type            :  1                               
+	|-Protocol Type            :  2048                            
+	|-Op code                  :  1                 =  ARP_REQUEST                               
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(enter to continue)
+
+
+(Well.. It actualy looks like this:
+
+FF FF FF FF FF FF 5C E0 C5 37 CC 74 08 06 00 01 |......\..7.t....|
+08 00 06 04 00 01 5C E0 C5 37 CC 74 C0 A8 01 57 |......\..7.t...W|
+00 00 00 00 00 00 C0 A8 01                      |........D       |
+
+Or it does when translated from raw bytes to hexadecimal, but I've parsed into a table it because thats not important.
+If you look closely you will see most of the data from above.)
+
+Moving on..
+
+(enter to continue)
+
+
+Setting the Destination MAC to 'broadcast address' (FF-FF-FF-FF-FF-FF) will send the packet to everyone in your IP range (192.168.1.0-224).
+The Target MAC is left blank (00-00-00-00-00-00) beacause this is what we are asking for.
+Setting the Target IP to the host and the Op code to ARP_REQUEST (1) will ask everone that receives the packet to check their ARP cache for this IP.
+The ARP cache is a table of all known IP and MAC addresses on your local area network (LAN).
+Your computer must know the MAC address of any device on your network it wishes to comunicate with.
+If any device on your network has the Target IP their ARP cache they will respond with an ARP_REPLY containing its MAC address.
+You normally use this to update your ARP cache, we will use it to get the MAC address of the host.
+
+Lets send it..
+
+(enter to continue)
+
+
+Now we wait for a reply ...
+
+Got one! (42 bytes)
+
+(enter to continue)
+
+
+****************************ARP PACKET****************************
+                                                                  
+Ethernet Header                                                   
+	|-Source Address           :  C4-FF-1F-71-78-6F <- replying device MAC               
+	|-Destination Address      :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-EtherType                :  0x0806                            
+                                                                  
+ARP header                                                        
+	|-Source MAC               :  C4-FF-1F-71-78-6F <- Host MAC               
+	|-Target MAC               :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Source IP                :  192.168.1.1       <- host IP                
+	|-Target IP                :  192.168.1.87      <- your IP                
+	|-Hardware Type            :  1                               
+	|-Protocol Type            :  2048                            
+	|-Op code                  :  2                 =  ARP_REPLY                               
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(enter to continue)
+
+
+If all went well you should now have the hosts MAC.
+If so, it will be in the Source MAC field, here its C4-FF-1F-71-78-6F.
+The Source address field tells us who reponded with this infomation.
+As all Wi-Fi trafic passes through the router, this is most likley the same MAC.
+
+Lets save this MAC and do the same for the target.
+The ARP request for the target will be the same as for the host, but with the target's IP in place of the host's.
+
+(enter to continue)
+
+
+****************************ARP PACKET****************************
+                                                                  
+Ethernet Header                                                   
+	|-Source Address           :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Destination Address      :  FF-FF-FF-FF-FF-FF <- broadcast address               
+	|-EtherType                :  0x0806                            
+                                                                  
+ARP header                                                        
+	|-Source MAC               :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Target MAC               :  00-00-00-00-00-00 <- don't know yet               
+	|-Source IP                :  192.168.1.87      <- your IP                
+	|-Target IP                :  192.168.1.68      <- the ip of the target                
+	|-Hardware Type            :  1                               
+	|-Protocol Type            :  2048                            
+	|-Op code                  :  1                 =  ARP_REQUEST                               
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(enter to continue)
+
+
+Now we wait for a reply ...
+
+Got one! (42 bytes)
+
+(enter to continue)
+
+
+****************************ARP PACKET****************************
+                                                                  
+Ethernet Header                                                   
+	|-Source Address           :  C8-E0-EB-2C-C0-23 <- replying device MAC               
+	|-Destination Address      :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-EtherType                :  0x0806                            
+                                                                  
+ARP header                                                        
+	|-Source MAC               :  C8-E0-EB-2C-C0-23 <- target MAC               
+	|-Target MAC               :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Source IP                :  192.168.1.68      <- target IP                
+	|-Target IP                :  192.168.1.87      <- your IP                
+	|-Hardware Type            :  1                               
+	|-Protocol Type            :  2048                            
+	|-Op code                  :  2                 =  ARP_REPLY                               
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(enter to continue)
+
+
+So now we have the targets MAC! Its C8-E0-EB-2C-C0-23.
+
+(enter to continue)
+
+
+Now that we have the devices MAC addresses we can move onto the actual cache poisoning!
+NOTE: if the target device is not yours and you do not have permission to access it this step is ILLEGAL.
+DO NOT CONTINUE without permissions, if you do not have permission, restart and try it on your phone.
+
+(enter to continue)
+
+
+Most likely your computer alrealdy had at least the host MAC in your ARP cache (see this by typing arp -a into a terminal).
+The ARP cache is a temporary table or map of MAC and IP addresses on your network.
+It is temporary because IP addreses change and can be the same over different LAN's
+
+However by going though this process we have already seen all the steps necessary for the trick we want to show.
+ARP cache poisoning exploits the fact that the ARP cache allows unsolicited ARP replies to update it.
+Because it is imposisble to know if the replies are legit or not we can send ARP replies that will change:
+
+The MAC of the host in the target's ARP cache to your MAC address.
+The MAC of the target in the host's ARP cache to your MAC address.
+
+All network trafic in your LAN is sent by MAC instead of IP.
+So the result of falsely updating the cache in this way is to make the target send you any data intended for the web to you.
+And the router (host) to send all internet data intended for the target to you.
+If you make sure to forward all of this data, neither the target nor the router will notice anything.
+But with a network sniffer like wireshark you can see everything the target is doing online including any inputed passwords
+Fortunatly because of ssl (https) this will probably all be very encrypted.
+But if the target uses http, you can read it directly.
+
+(enter to continue)
+
+
+First we will send several ARP replies to the host.
+They will look like this:
+
+(enter to continue)
+
+
+****************************ARP PACKET****************************
+                                                                  
+Ethernet Header                                                   
+	|-Source Address           :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Destination Address      :  C4-FF-1F-71-78-6F <- host MAC               
+	|-EtherType                :  0x0806                            
+                                                                  
+ARP header                                                        
+	|-Source MAC               :  5C-E0-C5-37-CC-74 <- YOUR MAC               
+	|-Target MAC               :  C4-FF-1F-71-78-6F <- host MAC               
+	|-Source IP                :  192.168.1.68      <- TARGET IP                
+	|-Target IP                :  192.168.1.1       <- host IP                
+	|-Hardware Type            :  1                               
+	|-Protocol Type            :  2048                            
+	|-Op code                  :  2                 =  ARP_REPLY                               
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(enter to continue)
+
+
+As you can see, we have set the source MAC to our own, but the source IP to the targets.
+This should cause the host (router) to reassociate the target's IP with your MAC.
+So when traffic comes in from the WWW.internet (or anywhere) for this IP, it will send it to you instead.
+
+We will then send several ARP replies to the target, they will look like this:
+
+(enter to continue)
+
+
+****************************ARP PACKET****************************
+                                                                  
+Ethernet Header                                                   
+	|-Source Address           :  5C-E0-C5-37-CC-74 <- your MAC               
+	|-Destination Address      :  C8-E0-EB-2C-C0-23 <- target MAC               
+	|-EtherType                :  0x0806                            
+                                                                  
+ARP header                                                        
+	|-Source MAC               :  5C-E0-C5-37-CC-74 <- YOUR MAC               
+	|-Target MAC               :  C8-E0-EB-2C-C0-23 <- target MAC               
+	|-Source IP                :  192.168.1.1       <- HOST IP                
+	|-Target IP                :  192.168.1.68      <- target IP                
+	|-Hardware Type            :  1                               
+	|-Protocol Type            :  2048                            
+	|-Op code                  :  2                 =  ARP_REPLY                               
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+(enter to continue)
+
+
+This is the same as the last but sent to the target with the target MAC and the host's IP.
+This should make the host reassociate our MAC with the targets IP.
+So when the target wants to get a webpage or send it some data it will ask/send it to us.
+It also means it won't see anything weird about us sending it the pages it has requested.
+We can do that because the router is sending it all to us.
+
+for this to work you will have to turn on IP forwarding, on Linux this is done by typing
+sudo echo 1 > /proc/sys/net/ipv4/ip_forward
+If that doesn't work try:
+sudo nano /proc/sys/net/ipv4/ip_forward      # and change the 0 to a 1If your not using Linux, google it
+
+If you have done this, we will now send 20 packets to each with a delay of 1 second, so this will take just under a minute.
+
+(enter to continue)
+
+
