@@ -25,27 +25,27 @@
 #define STIMEOUT 7 
 
 
-void clean_exit(int e_no);
-void print_usage(char *pname);
-void sigintHandler(int sig_num);
-void mac_to_str(char *mac_str, unsigned char mac[ETH_ALEN]);
-void parse_bytes(char* str, char sep, unsigned char *bytes, int maxBytes, int base);
-void ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN],
-                                    unsigned char s_mac[ETH_ALEN], 
-                                    unsigned char up_ips[255][ETH_ALEN]);
-int is_valid_ip(char *ipAddress);
-int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[4]);
-int get_if_info(int sock, char dev[IFNAMSIZ], 
-                          struct ifreq *ifreq_i,
-                          struct ifreq *ifreq_c,
-                          struct ifreq *ifreq_ip);
-int send_arp(int sock, int if_idx, unsigned char *s_mac, 
-                                   unsigned char *d_mac, 
-                                   unsigned char *arp_s_mac, 
-                                   unsigned char *arp_t_mac, 
-                                   uint8_t arp_s_ip[4], 
-                                   uint8_t arp_t_ip[4], 
-                                   unsigned short int opcode);
+void clean_exit(int);
+void print_usage(char *);
+void sigintHandler(int);
+void mac_to_str(char *, unsigned char mac[ETH_ALEN]);
+void parse_bytes(char *, char, unsigned char *, int, int);
+void ip_sweep(int, int, uint8_t s_ip[IP_ALEN],
+                        unsigned char s_mac[ETH_ALEN], 
+                        unsigned char up_ips[255][ETH_ALEN]);
+int is_valid_ip(char *);
+int recv_arp(int, char *, unsigned short int, uint8_t s_ip[4]);
+int get_if_info(int, char dev[IFNAMSIZ], 
+                     struct ifreq *,
+                     struct ifreq *,
+                     struct ifreq *);
+int send_arp(int, int, unsigned char *, 
+                       unsigned char *, 
+                       unsigned char *, 
+                       unsigned char *, 
+                       uint8_t arp_s_ip[4], 
+                       uint8_t arp_t_ip[4], 
+                       unsigned short int);
 
 
 uint8_t broadcast[] = "\xff\xff\xff\xff\xff\xff";
@@ -304,7 +304,7 @@ void ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN],
             clean_exit(5);
         }
 
-        if (ntohs(((struct ethhdr*)(buf))->h_proto) == 0x0806) {
+        if (ntohs(((struct ethhdr*)(buf))->h_proto) == ETH_P_ARP) {
             struct ether_arp *arp = (struct ether_arp *)(buf + sizeof(struct ethhdr));
 
             if (ntohs(arp->ea_hdr.ar_op) == ARPOP_REPLY) {
@@ -344,8 +344,8 @@ void mac_to_str(char mac_str[MACSLEN], unsigned char mac[ETH_ALEN]) {
                                                mac[5]);
 }
 
-void parse_bytes(char* str, char sep, unsigned char *bytes, int maxBytes, int base) {
-    for (int i = 0; i < maxBytes; i++) {
+void parse_bytes(char* str, char sep, unsigned char *bytes, int max_bytes, int base) {
+    for (int i = 0; i < max_bytes; i++) {
         bytes[i] = strtoul(str, NULL, base);
         str      = strchr(str, sep);
 
@@ -390,9 +390,9 @@ int get_if_info(int sock, char dev[IFNAMSIZ],
     return 0;
 }
 
-int is_valid_ip(char *ipAddress) {
+int is_valid_ip(char *ip) {
     struct sockaddr_in sa;
-    int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
+    int result = inet_pton(AF_INET, ip, &(sa.sin_addr));
     return result > 0;
 }
 

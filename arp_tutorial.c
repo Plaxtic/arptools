@@ -27,10 +27,10 @@
 #define IPSLEN   20
 #define MACSLEN  25
 #define TCPBUFZ  68880
-#define NPACKS   20
+#define NPACKS   20 
 #define IP_ALEN  4
-#define SDELAY   1000
-#define STIMEOUT 10 
+#define SDELAY   500
+#define STIMEOUT 7 
 #define ARP_PSIZ 42
 #define FAIL     -1
 
@@ -286,6 +286,7 @@ int main() {
                                         our_ip, 
                                         host_ip,
                                         ARPOP_REQUEST);
+    printf("Sent\n");
     printf("Now we wait for a reply ...\n\n");
     recv_len = recv_arp(sock, recv_buf, ARPOP_REPLY, host_ip);
     printf("Got one! (%d bytes)\n\n", recv_len);
@@ -340,6 +341,7 @@ int main() {
                                         our_ip, 
                                         target_ip,
                                         ARPOP_REQUEST);
+    printf("Sent\n");
     printf("Now we wait for a reply ...\n\n");
     recv_len = recv_arp(sock, recv_buf, ARPOP_REPLY, target_ip);
     printf("Got one! (%d bytes)\n\n", recv_len);

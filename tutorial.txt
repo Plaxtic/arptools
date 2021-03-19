@@ -162,6 +162,8 @@ Lets send it..
 (enter to continue)
 
 
+Sent!
+
 Now we wait for a reply ...
 
 Got one! (42 bytes)
@@ -219,6 +221,8 @@ ARP header
 
 (enter to continue)
 
+
+Sent!
 
 Now we wait for a reply ...
 
@@ -351,4 +355,69 @@ If you have done this, we will now send 20 packets to each with a delay of 1 sec
 
 (enter to continue)
 
+Poisoning host...
+...
+
+Poisoning target...
+...
+
+Done! now we can wait and sniff for our first TCP packet from the target or host!
+
+Waiting...
+
+
+
+Got one!
+
+(enter to continue)
+
+
+****************************TCP PACKET****************************
+
+Ethernet Header
+	|-Source Address           :  C8-E0-EB-2C-C0-23
+	|-Destination Address      :  FF-FF-FF-FF-FF-FF
+	|-EtherType                :  0x800
+
+IP Header
+	|-Version                  :  4
+	|-Internet Header Length   :  5 DWORDS or 20 Bytes
+	|-Type Of Service          :  0
+	|-Total Length             :  72 Bytes
+	|-Identification           :  65325
+	|-Time To Live             :  64
+	|-Protocol                 :  17
+	|-Header Checksum          :  63203
+	|-Source IP                :  192.168.1.68
+	|-Destination IP           :  192.168.1.255
+
+TCP header
+	|-Source Port              :  57621
+	|-Destination Port         :  57621
+	|-Sequence Number          :  52
+	|-ACK Number               :  21360
+	|--------flags-------
+		|-Urgent                 :  256
+		|-ACK                    :  0
+		|-Push                   :  256
+		|-RST                    :  256
+		|-SYN                    :  256
+		|-Finish                 :  256
+
+
+Payload
+
+53 70 6F 74 55 64 70 30 E6 5D 8A 04 28 0D F8 F8 |SpotUdp0.]..(...|
+00 01 00 04 48 95 C2 03 E3 48 75 45 89 5A E4 26 |....H....HuE.Z.&|
+A0 78 04 A3 9D A3 FD E0 1D 50 B2                |x.......P.&     |
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+You got your first packet!
+Theres a small chance you have gotten it for some other reason but probably it has been redirected from the target!
+Now if you want to analyse the stream of stolen packets you should probably jump on wireshark or use tcpdump.
+This program is not really made for bulk packet sniffing, but if you like we can keep showing you TCP trafic from the target.
+
+Type 'more' to keep seeing trafic or press enter to leave this tutorial.
 
