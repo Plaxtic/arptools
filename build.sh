@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -e
 
 for c in *.c; do
     echo ${c%.c};
