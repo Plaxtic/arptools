@@ -285,9 +285,9 @@ int recv_arp(int sock, unsigned char *buf, unsigned short int op_code, uint8_t s
 }
     
 void print_usage(char *pname) {
-    char *u_string = "Usage: %s -t target-sufix [-i interface   (else default)]   \n"
-                     "                                   [-h host-sufix  (default 1)]  \n" 
-                     "                                   [-n num-packets (default 20)]\n";
+    char *u_string = "Usage: (sudo) %s -t target-sufix [-i interface   (else default)]   \n"
+                     "                                          [-h host-sufix  (default 1)]  \n" 
+                     "                                          [-n num-packets (default 20)]\n";
     printf(u_string, pname);
 }
 

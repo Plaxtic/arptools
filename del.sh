@@ -5,7 +5,7 @@ for sh in *.sh; do
     chmod -x $sh;
 done
 
-# delete all executibles
+# delete all executables
 find . -maxdepth 1 -type f -executable -delete
 
 # turn .sh back on

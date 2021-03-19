@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
     // create raw socket
     if ((sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) < 0) {
         if (getuid() != 0) {
-            printf("Run again as sudo! (sudo ./arp_spoof)\n");
+            printf("Run again as sudo! (sudo %s)\n", argv[0]);
             clean_exit(0);
         }
         printf("Error : raw sock create failed\n");

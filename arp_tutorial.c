@@ -81,7 +81,7 @@ int sock_no;
 unsigned char *bp;
 
 
-int main() {
+int main(int argc, char *argv[]) {
     char dev[IFNAMSIZ];
     char our_m_str[MACSLEN], target_m_str[MACSLEN], host_m_str[MACSLEN], reply_m_str[MACSLEN];    
     char our_ip_str[IPSLEN], host_str[IPSLEN], target_str[IPSLEN], reply_str[IPSLEN];
@@ -98,7 +98,7 @@ int main() {
     // create raw socket
     if ((sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == FAIL) {
         if (getuid() != 0) {
-            printf("Run again as sudo! (sudo ./arp_spoof)\n");
+            printf("Run again as sudo! (sudo %s)\n", argv[0]);
             clean_exit(0);
         }
         printf("Error : raw sock create failed\n");

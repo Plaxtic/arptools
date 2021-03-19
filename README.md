@@ -16,6 +16,7 @@ Only works on Linux
 
 All require sudo to open raw sockets
 
+
 tutorial: 
 
     sudo ./arp_tutorial
@@ -25,6 +26,7 @@ tutorial:
 * Scans class C LAN for up IP's
 * Poisons user chosen target and host
 
+
 spoof:
 
     sudo ./arp_spoof <interface> <target-sufix> <host-sufix> [num-packets]
@@ -33,12 +35,14 @@ spoof:
 * Sends num-packets ARP poison (default 20) each to host and target over interface
 * Gets interface IP so you only enter the last fields (only works on class C)
 
+
 unspoof:
 
     sudo ./arp_unspoof <interface> <target-sufix> <host-sufix>
  
 * Same as arp_spoof but backwards
 * Usefull if you accidentaly DoS your flatmates or yourself
+
 
 sweep: 
 
