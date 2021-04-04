@@ -9,25 +9,21 @@
 #include <signal.h>
 #include <wchar.h>
 #include <locale.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <netpacket/packet.h>
 #include <arpa/inet.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <net/if_arp.h>
 #include <net/if.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/if_ether.h>
-#include <netinet/udp.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <netinet/igmp.h>
 
 
 #define IPSLEN   20
 #define MACSLEN  25
 #define TCPBUFZ  68880
-#define NPACKS   20 
+#define NPACKS   5 
 #define IP_ALEN  4
 #define SDELAY   500
 #define STIMEOUT 7 
@@ -36,48 +32,44 @@
 
 
 void enter();
-int is_valid_ip(char *ipAddress);
-void clean_exit(int e_no);
-unsigned short checksum(unsigned short* buff, int _16bitword);
-int get_dev(char dev[IFNAMSIZ]);
-void sigintHandler(int sig_num);
-void scon_to_arp(char scon[7][60]);
-void mac_to_str(char *mac_str, unsigned char mac[ETH_ALEN]);
-int recv_tcp(int sock, unsigned char *buf, char *ip);
-void print_payload(unsigned char *data, int data_size);
-void print_tcp(unsigned char *packet, unsigned int packet_size);
-void print_arp(char *if_mac, char *e_dest, char *s_mac, char *d_mac, char *s_ip, char *t_ip, char *op);
-void parse_bytes(const char* str, char sep, unsigned char *bytes, int maxBytes, int base);
-int recv_arp(int sock, unsigned char *buf, unsigned short int op_code, uint8_t s_ip[4]);
-void ip_sweep(int sock, char *LAN, uint8_t s_ip[IP_ALEN], 
-                                   unsigned char s_mac[ETH_ALEN], int if_idx);
-int send_udp(unsigned char dst_ip[], unsigned char dst_mac[], char *dev,
-                            unsigned int data_size, unsigned char payload[data_size]);
-int get_if_info(int sock, char dev[IFNAMSIZ], 
-                          struct ifreq *ifreq_i,
-                          struct ifreq *ifreq_c,
-                          struct ifreq *ifreq_ip);
-void make_packet(unsigned char *buf, unsigned char *s_mac, 
-                                unsigned char *d_mac, 
-                                unsigned char *arp_s_mac, 
-                                unsigned char *arp_t_mac, 
-                                uint8_t arp_s_ip[IP_ALEN], 
-                                uint8_t arp_t_ip[IP_ALEN], 
-                                unsigned short int opcode);
-int send_arp(int sock, int if_idx, unsigned char *s_mac, 
-                                   unsigned char *d_mac, 
-                                   unsigned char *arp_s_mac, 
-                                   unsigned char *arp_t_mac, 
-                                   uint8_t arp_s_ip[IP_ALEN], 
-                                   uint8_t arp_t_ip[IP_ALEN], 
-                                   unsigned short int opcode);
+void clear();
+int is_valid_ip(char *);
+void clean_exit(int);
+int get_dev(char [IFNAMSIZ]);
+void sigintHandler(int);
+void scon_to_arp(char [7][60]);
+void mac_to_str(char *, unsigned char [ETH_ALEN]);
+void print_payload(unsigned char *, int);
+void print_tcp(unsigned char *, unsigned int );
+void print_arp(char *, char *, char *, char *, char *, char *, char *);
+void parse_bytes(char*, char, unsigned char *, int, int);
+int recv_tcp(int, unsigned char *, char *);
+int recv_arp(int, unsigned char *, unsigned short int , uint8_t [4]);
+void ip_sweep(int, int, uint8_t [IP_ALEN], unsigned char [ETH_ALEN]);
+int get_if_info(int , char [IFNAMSIZ], struct ifreq *,
+                                       struct ifreq *,
+                                       struct ifreq *);
+void make_packet(unsigned char *, unsigned char *, 
+                                  unsigned char *, 
+                                  unsigned char *, 
+                                  unsigned char *, 
+                                  uint8_t [IP_ALEN], 
+                                  uint8_t [IP_ALEN], 
+                                  unsigned short int);
+int send_arp(int, int, unsigned char *, 
+                       unsigned char *, 
+                       unsigned char *, 
+                       unsigned char *, 
+                       uint8_t [IP_ALEN], 
+                       uint8_t [IP_ALEN], 
+                       unsigned short int );
 
 
 uint8_t broadcast[] = "\xff\xff\xff\xff\xff\xff";
 uint8_t empty[]     = "\x00\x00\x00\x00\x00\x00";
-char op[][20]       = {"ARP_REQUEST", "ARP_REPLY"};
+char *op[]          = {"ARP_REQUEST", "ARP_REPLY"};
 wchar_t emojis      = 0x1F000;
-int sock_no;
+int sock_no, tsiz;
 unsigned char *bp;
 
 
@@ -87,6 +79,7 @@ int main(int argc, char *argv[]) {
     char our_ip_str[IPSLEN], host_str[IPSLEN], target_str[IPSLEN], reply_str[IPSLEN];
     char LAN_ip[IPSLEN-4], t_sufix[4];
     char cont[6];
+    struct winsize w;
     struct ifreq ifreq_i, ifreq_c, ifreq_ip;
     unsigned char our_mac[ETH_ALEN], target_mac[ETH_ALEN], host_mac[ETH_ALEN];
     uint8_t our_ip[IP_ALEN], host_ip[IP_ALEN], target_ip[IP_ALEN];
@@ -94,6 +87,7 @@ int main(int argc, char *argv[]) {
     char scon[7][60];
 
     unsigned char *recv_buf = calloc(ARP_PSIZ, sizeof(unsigned char *));
+
 
     // create raw socket
     if ((sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == FAIL) {
@@ -106,8 +100,10 @@ int main(int argc, char *argv[]) {
     }
 
     // pass socket number and buffer to globals for clean clean_exit
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    tsiz    = w.ws_row;
     sock_no = sock;
-    bp = recv_buf;
+    bp      = recv_buf;
     signal(SIGINT, sigintHandler);
 
     // 4 emojis
@@ -131,7 +127,7 @@ int main(int argc, char *argv[]) {
     printf("And trick the router into sending internet trafic intended for them to you also.\n");
     printf("By forwarding the trafic back and forth, it is possible to look at it without either device noticing.\n");
     printf("Thus becoming an invisible 'man-in-the-middle' between the target device and the host router.\n\n");
-    printf("Please bear in mind that you will need a device you are allowed to spy on or the following will be ilegal.\n");
+    printf("Please bear in mind that you will need a device you are allowed to spy on or the following will be illegal.\n");
     printf("Your phone is a good bet.\n\n");
     enter();
 
@@ -172,7 +168,7 @@ int main(int argc, char *argv[]) {
 
     // scan for IP's
     printf("\nScanning your network...\n");
-    ip_sweep(sock, LAN_ip, our_ip, our_mac, ifreq_i.ifr_ifindex);
+    ip_sweep(sock, ifreq_i.ifr_ifindex, our_ip, our_mac);
     enter();
 
     // get target IP from user 
@@ -219,7 +215,7 @@ int main(int argc, char *argv[]) {
     //explain ARP request 
     printf("\nAn ARP request is a very small packet of data sent from your computer or phone to everyone on your network.\n");
     printf("The packet is normaly only 42 bytes long, which takes up no more memory than this sentence:\n");
-    printf("Hi, I am a sentence of only 42 characters.\n");
+    printf("\nHi, I am a sentence of only 42 characters.\n\n");
     printf("The packet contains MAC and IP addresses.\n");
     printf("You probably know what an IP is, but maybe not a MAC.\n");
     printf("A MAC address is the hardware address of your network interface is assigned by the manufacturer.\n");
@@ -392,7 +388,7 @@ int main(int argc, char *argv[]) {
     printf("So the result of falsely updating the cache in this way is to make the target send you any data intended for the web to you.\n");
     printf("And the router (host) to send all internet data intended for the target to you.\n");
     printf("If you make sure to forward all of this data, neither the target nor the router will notice anything.\n");
-    printf("But with a network sniffer like wireshark you can see everything the target is doing online including any inputed passwords\n");
+    printf("But with a network sniffer like wireshark you can see everything the target is doing online including any inputted passwords\n");
     printf("Fortunatly because of ssl (http\033[0;31ms\033[0m) this will probably all be very encrypted.\n");
     printf("But if the target uses http, you can read it directly.\n\n");
     enter();
@@ -402,13 +398,13 @@ int main(int argc, char *argv[]) {
     enter();
 
     // print malicious packet 1
-    sprintf(scon[0], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
-    sprintf(scon[1], "\033[0;31m%s\033[0m <- host MAC", host_m_str);
-    sprintf(scon[2], "\033[0;31m%s <- YOUR MAC\033[0m", our_m_str);
-    sprintf(scon[3], "\033[0;34m%s\033[0m <- host MAC", host_m_str);
+    sprintf(scon[0], "\033[0;34m%s\033[0m <- your MAC",     our_m_str);
+    sprintf(scon[1], "\033[0;31m%s\033[0m <- host MAC",     host_m_str);
+    sprintf(scon[2], "\033[0;31m%s <- YOUR MAC\033[0m",     our_m_str);
+    sprintf(scon[3], "\033[0;34m%s\033[0m <- host MAC",     host_m_str);
     sprintf(scon[4], "\033[0;31m%-17s <- TARGET IP\033[0m", target_str);
-    sprintf(scon[5], "\033[0;34m%-17s\033[0m <- host IP", host_str);
-    sprintf(scon[6], "\033[0;31m%-17d\033[0m =  %s", ARPOP_REPLY, op[ARPOP_REPLY-1]);
+    sprintf(scon[5], "\033[0;34m%-17s\033[0m <- host IP",   host_str);
+    sprintf(scon[6], "\033[0;31m%-17d\033[0m =  %s",        ARPOP_REPLY, op[ARPOP_REPLY-1]);
     scon_to_arp(scon);
     enter();
 
@@ -419,9 +415,9 @@ int main(int argc, char *argv[]) {
     enter();
 
     // print malicious packet 2 
-    sprintf(scon[0], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
+    sprintf(scon[0], "\033[0;34m%s\033[0m <- your MAC",   our_m_str);
     sprintf(scon[1], "\033[0;31m%s\033[0m <- target MAC", target_m_str);
-    sprintf(scon[2], "\033[0;31m%s <- YOUR MAC\033[0m", our_m_str);
+    sprintf(scon[2], "\033[0;31m%s <- YOUR MAC\033[0m",   our_m_str);
     sprintf(scon[3], "\033[0;34m%s\033[0m <- target MAC", target_m_str);
     sprintf(scon[4], "\033[0;31m%-17s <- HOST IP\033[0m", host_str);
     sprintf(scon[5], "\033[0;34m%-17s\033[0m <- target IP", target_str);
@@ -438,7 +434,7 @@ int main(int argc, char *argv[]) {
     printf("for this to work you will have to turn on IP forwarding, on Linux this is done by typing\n");
     printf("sudo echo 1 > /proc/sys/net/ipv4/ip_forward\n");
     printf("If that doesn't work try:\n");
-    printf("sudo nano /proc/sys/net/ipv4/ip_forward      # and change the 0 to a 1");
+    printf("sudo nano /proc/sys/net/ipv4/ip_forward      # and change the 0 to a 1\n");
     printf("If your not using Linux, google it\n\n");
 
     printf("If you have done this, we will now send %d packets to each with a delay of 1 second, so this will take just under a minute.\n\n"
@@ -547,12 +543,16 @@ void scon_to_arp(char scon[7][60]){
               scon[5], 
               scon[6]); 
 }
-              
+
+void clear() {
+    int i = tsiz;
+    while (i--) printf("\n");
+}            
+
 void enter() {
     printf("(enter to continue)");
     char e = 0;
     while ((e = getchar()) != '\n');
-    printf("\n");
 }
 
 void mac_to_str(char mac_str[MACSLEN], unsigned char mac[ETH_ALEN]) {
@@ -587,19 +587,17 @@ void print_arp(char *if_mac, char *e_dest, char *s_mac, char *d_mac, char *s_ip,
     printf(arp_p, if_mac, e_dest, s_mac, d_mac, s_ip, t_ip, op);
 }
 
-void ip_sweep(int sock, char *LAN, uint8_t s_ip[IP_ALEN], 
-                                   unsigned char s_mac[ETH_ALEN], int if_idx) { 
+void ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN], 
+                                    unsigned char s_mac[ETH_ALEN]) { 
     unsigned char *buf = calloc(ARP_PSIZ, sizeof(unsigned char));
-    char t_str[IPSLEN];
     uint8_t t_ip[IP_ALEN];
-    bool up_ips[255] = {0};
     int i;
+
+    memcpy(t_ip, s_ip, IP_ALEN);
 
     // spam ARP requests
     for (i = 1; i < 254; i++) {
-        memset(t_str, 0, IPSLEN);
-        sprintf(t_str, "%s.%d", LAN, i);
-        parse_bytes(t_str, '.', t_ip, IP_ALEN, 10);
+        t_ip[3] = i;
         send_arp(sock, if_idx, s_mac,
                 broadcast,
                 s_mac,
@@ -630,23 +628,19 @@ void ip_sweep(int sock, char *LAN, uint8_t s_ip[IP_ALEN],
             struct ether_arp *arp = (struct ether_arp *)(buf + sizeof(struct ethhdr));
 
             if (ntohs(arp->ea_hdr.ar_op) == ARPOP_REPLY) {
-                up_ips[arp->arp_spa[3]] = true;
+                printf("IP online on your network: \033[0;34m%d.%d.%d.%d\033[0m\n", 
+                        arp->arp_spa[0],
+                        arp->arp_spa[1],
+                        arp->arp_spa[2],
+                        arp->arp_spa[3]);
             }
         }
         start = time(NULL);
     }
-
-    // print hosts 
-    printf("\n\n\nFound these addresses online (there might be more):\n\n");
-    for (i = 0; i < 255; ++i) {
-        if (up_ips[i]) {
-            printf("\033[0;34m%s.%d\033[0m\n", LAN, i);
-        }
-    }
-    printf("\n");
+    printf("\n\n\nIP scan complete (there might be more IP's online)\n\n");
 }
 
-void parse_bytes(const char* str, char sep, unsigned char *bytes, int maxBytes, int base) {
+void parse_bytes(char* str, char sep, unsigned char *bytes, int maxBytes, int base) {
     for (int i = 0; i < maxBytes; i++) {
         bytes[i] = strtoul(str, NULL, base);
         str = strchr(str, sep);
@@ -954,8 +948,8 @@ void print_tcp(unsigned char *packet, unsigned int packet_size) {
     printf("\t\t|-Finish                 :  %d\n", ntohs(tcp->urg));
 
     // Print payload 
-    unsigned char *data = (packet + iphdrlen + sizeof(struct ether_header) + sizeof(struct udphdr));
-    int data_size = packet_size - (iphdrlen + sizeof(struct ether_header) + sizeof(struct udphdr));
+    unsigned char *data = (packet + iphdrlen + sizeof(struct ether_header) + sizeof(struct tcphdr));
+    int data_size = packet_size - (iphdrlen + sizeof(struct ether_header) + sizeof(struct tcphdr));
     
     printf("\n\nPayload\n\n");
     print_payload(data, data_size);
