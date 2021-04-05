@@ -432,7 +432,7 @@ int send_arp(int sock, int if_idx, uint8_t s_mac[ETH_ALEN],
 
     // set hardware type, protocol and opcode
     arp->ea_hdr.ar_hrd = htons(ARPHRD_ETHER);
-    arp->ea_hdr.ar_pro = htons(0x0800);
+    arp->ea_hdr.ar_pro = htons(ETH_P_IP);
     arp->ea_hdr.ar_op  = htons(opcode);
     
     // number of bytes in MAC/IP addresses
