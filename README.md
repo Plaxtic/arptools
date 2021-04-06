@@ -21,7 +21,7 @@ tutorial:
 
     sudo ./arp_tutorial
 
-* Walkthough of, what ARP packets are, how they work, and how they can be exploited
+* Walkthough of: what ARP packets are, how they work, and how they can be exploited
 * Scans for network interfaces
 * Scans class C LAN for up IP's
 * Poisons user chosen target and host
@@ -41,7 +41,7 @@ unspoof:
     sudo ./arp_unspoof <interface> <target-sufix> <host-sufix>
  
 * Same as arp_spoof but backwards
-* Usefull if you accidentaly DoS your flatmates or yourself
+* Useful if you accidentaly DoS your flatmates or yourself
 
 
 sweep: 
