@@ -41,8 +41,8 @@ int main(int argc, char **argv) {
     while ((op = getopt(argc, argv, "h:n:i:")) != FAIL) {
         switch (op) {
 
+            // set interface option 
             case 'i':
-                // set interface option 
                 dev_from_arg = 1;
 
                 if (strlen(optarg) > IFNAMSIZ) {
@@ -53,16 +53,16 @@ int main(int argc, char **argv) {
                 dev[strlen(optarg)] = 0;
                 break;
 
+            // host sufix option
             case 'h':
-                // host sufix option
                 if ((sufix = atoi(optarg)) > 254) {
                     fprintf(stderr, "Error : host sufix %d too high (over 254)\n", sufix);
                     exit(1);
                 }
                 break;
 
+            // num-packets option
             case 'n':
-                // num-packets option
                 num_packets = atoi(optarg);
                 break;
 
@@ -108,6 +108,11 @@ int main(int argc, char **argv) {
     // scan network for targets 
     struct ip_mac *ip_mac_pairs = ip_sweep(sock, ifreq_i.ifr_ifindex, our_ip, our_mac);
 
+    // check list not empty
+    if (ip_mac_pairs == NULL) {
+        err(1, "found no response on network");
+    }
+
     // save host mac
     memset(host_mac, 0, ETH_ALEN);
     struct ip_mac *p   = ip_mac_pairs;
@@ -137,8 +142,7 @@ int main(int argc, char **argv) {
         }            
         if (p->next == NULL) {
             if (memcmp(host_mac, empty, ETH_ALEN) == 0) {
-                fprintf(stderr, "Could not get host %s MAC\n", host_str);
-                exit(1);
+                (stderr, "Could not get host %s MAC\n", host_str);
             }
             break;
         }
@@ -150,6 +154,9 @@ int main(int argc, char **argv) {
         prv = p;
         p   = p->next;
     }
+
+    // check more than one host
+    if (!i) err(1, "Not enough hosts\n");
 
     // poison everyone
     int h = 0;

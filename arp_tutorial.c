@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
     printf("If the host is your router last digit is probably 1 (\033[0;34m%s.\033[0;31m1\033[0m) if its not, please enter it: ", 
                                     LAN_ip);
     while (1) {
-        fgets(h_sufix, IPSLEN, stdin);
+        fgets(h_sufix, 4, stdin);
 
         if ((host_ip[3] = atoi(h_sufix)) == 0) {
             host_ip[3] = 1;
