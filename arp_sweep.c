@@ -124,6 +124,8 @@ int main(int argc, char **argv) {
             memcpy(host_mac, p->mac, ETH_ALEN);
             mac_to_str(host_m_str, host_mac);
 
+            printf("Host %s MAC: %s\n", host_str, host_m_str);
+
             // remove host from linked list
             struct ip_mac *tmp = p;
             if (prv) {
@@ -142,11 +144,12 @@ int main(int argc, char **argv) {
         }            
         if (p->next == NULL) {
             if (memcmp(host_mac, empty, ETH_ALEN) == 0) {
-                (stderr, "Could not get host %s MAC\n", host_str);
+                fprintf(stderr, "Could not get host %s MAC\n", host_str);
+                exit(1);
             }
             break;
         }
-        printf("Found host %d: %d.%d.%d.%d\n", ++i,
+        printf("Found target %d: %d.%d.%d.%d\n", ++i,
                 p->ip[0],
                 p->ip[1],
                 p->ip[2],

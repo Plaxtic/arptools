@@ -23,7 +23,7 @@ tutorial:
 
 * Walkthough of: what ARP packets are, how they work, and how they can be exploited
 * Scans for network interfaces
-* Scans class C LAN for up IP's
+* Scans class C LAN for up IPs
 * Poisons user chosen target and host
 
 

